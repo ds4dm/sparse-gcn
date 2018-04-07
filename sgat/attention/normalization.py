@@ -3,13 +3,13 @@
 
 """Normalization classes."""
 
-from .utils import Callable
+import torch.nn as nn
 
 
-class Normalization(object, metaclass=Callable):
+class Normalization(nn.Module):
     """Normalization base class.
 
-    A normalization class implements a function `__call__` with one parameter:
+    A normalization class implements a function `forward` with one parameter:
     the unnormalized attention weights for every query over every values.
     """
 
@@ -19,6 +19,6 @@ class Normalization(object, metaclass=Callable):
 class NoNorm(Normalization):
     """No normalization class."""
 
-    def __call__(self, QKt):
+    def forward(self, QKt):
         """Identity function."""
         return QKt
