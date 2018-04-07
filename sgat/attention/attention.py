@@ -6,11 +6,12 @@ Attention as defined in Attention is All you Need.
 https://arxiv.org/abs/1706.03762
 """
 
+import torch.nn as nn
 from .affinity import Affinity
 from .normalization import Normalization
 
 
-class Attention(object):
+class Attention(nn.Module):
     """Attention.
 
     TODO: if necessary make a batched version of this. Note batch of different
@@ -33,7 +34,7 @@ class Attention(object):
         self.affinity = affinity
         self.norm = norm
 
-    def __call__(self, K, V, Q, m=None):
+    def forward(self, K, V, Q, m=None):
         """Compute attention.
 
         Accoring to _Attention is All you Need_:

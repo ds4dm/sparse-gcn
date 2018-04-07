@@ -3,14 +3,14 @@
 """Affinities classes."""
 
 import torch
+import torch.nn as nn
 from math import sqrt
-from .utils import Callable
 
 
-class Affinity(object, metaclass=Callable):
+class Affinity(nn.Module):
     """Affinity base class.
 
-    An affinity class implements a function `__call__` with three parameters:
+    An affinity class implements a function `forward` with three parameters:
     the attention keys, the attention queries and some optional query-keys
     specifics (e.g a mask).
     """
@@ -37,7 +37,7 @@ class DotProduct(Affinity):
         """
         self.scaled = scaled
 
-    def __call__(self, K, Q, m=None):
+    def forward(self, K, Q, m=None):
         """Compute dot-product affinity.
 
         Parameters
