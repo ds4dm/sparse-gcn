@@ -31,6 +31,7 @@ class Attention(nn.Module):
                 attention  weights.
 
         """
+        super().__init__()
         self.affinity = affinity
         self.norm = norm
 
@@ -68,6 +69,6 @@ class Attention(nn.Module):
             similar to the value ones.
 
         """
-        QKt = self.affinity(K, V, m)
+        QKt = self.affinity(Q, K, m)
         QKt_n = self.norm(QKt)
         return QKt_n @ V

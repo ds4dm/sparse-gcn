@@ -35,17 +35,18 @@ class DotProduct(Affinity):
                 of the square root of the key dimension.
 
         """
+        super().__init__()
         self.scaled = scaled
 
-    def forward(self, K, Q, m=None):
+    def forward(self, Q, K, m=None):
         """Compute dot-product affinity.
 
         Parameters
         ----------
-            K : FloatTensor
-                Keys tensor with dimensions (n_keys, feat_dim).
             Q : FloatTensor
                 Queries tensor with dimension (n_queries, feat_dim).
+            K : FloatTensor
+                Keys tensor with dimensions (n_keys, feat_dim).
             m : FloatTensor or sparse.Tensor
                 Optional mask. If the mask is given in dense form it is applied
                 by elementwise multiplication. If given in sparse form, only
