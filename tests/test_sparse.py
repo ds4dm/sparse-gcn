@@ -14,9 +14,11 @@ class TestSparse(unittest.TestCase):
         self.i = torch.LongTensor([[1, 4, 9]])
         self.v = Variable(torch.rand(3), requires_grad=True)
 
+    @unittest.skip("Not implemented")
     def test_sparse(self):
         raise NotImplementedError()
 
+    @unittest.skip("Not implemented")
     def test_values(self):
         raise NotImplementedError()
 
@@ -26,6 +28,7 @@ class TestSparse(unittest.TestCase):
         diff = g == torch.ones_like(g)
         self.assertTrue(bool(diff.all()))
 
-    @unittest.skipIf(not torch.cuda.is_available(), "Cuda unavailable.")
+    @unittest.skip("Not implemented")
+    @unittest.skipUnless(torch.cuda.is_available(), "Cuda unavailable.")
     def test_sparse_values_cuda(self):
         raise NotImplementedError()
