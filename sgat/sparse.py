@@ -5,6 +5,9 @@
 import torch
 from torch.autograd import Function
 
+import numpy as np
+
+
 class Build(Function):
 
     @staticmethod
@@ -43,5 +46,81 @@ class Values(Function):
 
         return A_grad
 
+
+class Sum(Function):
+
+    @staticmethod
+    def forward(ctx, input, dims=None):
+        
+        SparseTensorType = eval(input.type())
+        IdxTensorType = eval(input._indices().type())
+        
+        ndims = len(input.size())
+        nvals = input._values().size(0)
+        
+        if dims is None:
+            dims=list(range(ndims))
+        else:
+            # safety checks on dims
+            dims = np.asarray(dims)
+            assert np.all(dims >= 0)
+            assert np.all(dims < ndims)
+            assert len(np.unique(dims)) == len(dims)
+            dims = np.sort(dims).tolist()
+    
+        zero_idx = IdxTensorType(1).zero_().expand(nvals)
+
+        indices = []
+        size = []
+        for d in range(ndims):
+            if d not in dims:
+                indices.append(input._indices()[d])
+                size.append(input.size(d))
+            else:
+                indices.append(zero_idx)
+                size.append(1)
+        
+        indices = torch.stack(indices)
+        
+        ctx.save_for_backward(input._indices(), indices)
+        ctx.input_type = SparseTensorType
+        ctx.input_nvals = nvals
+        ctx.input_shape = input.shape
+        
+        output = SparseTensorType(
+            indices,
+            input._values(),
+            size,
+        ).coalesce()
+
+        return output
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        input_indices, coalesced_indices = ctx.saved_tensors
+
+        grad_input = None
+        if ctx.needs_input_grad[0]:
+            output_indices = grad_output._indices()
+
+            output_indices_dict = {
+                tuple(k): i for i, k in enumerate(
+                    output_indices.numpy().transpose())}
+            
+            out_to_in_map = [output_indices_dict[
+                tuple(k)] for k in
+                    coalesced_indices.numpy().transpose()]
+
+            grad_input = ctx.input_type(
+                input_indices,
+                grad_output._values()[out_to_in_map],
+                ctx.input_shape
+            )
+
+        return grad_input, None
+
+
 build = Build.apply
 values = Values.apply
+sum = Sum.apply
+
