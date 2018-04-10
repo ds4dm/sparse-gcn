@@ -23,7 +23,7 @@ class TestSparse(unittest.TestCase):
         raise NotImplementedError()
 
     def test_sparse_values(self):
-        v_hat = sp.values(sp.sparse(self.i, self.v))
+        v_hat = sp.values(sp.build(self.i, self.v))
         g, = grad(v_hat.sum(), self.v)
         diff = g == torch.ones_like(g)
         self.assertTrue(bool(diff.all()))
