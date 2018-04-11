@@ -7,6 +7,7 @@ https://arxiv.org/abs/1706.03762
 """
 
 import torch.nn as nn
+from .. import sparse as sp
 from .affinity import Affinity
 from .normalization import Normalization
 
@@ -71,4 +72,7 @@ class Attention(nn.Module):
         """
         QKt = self.affinity(Q, K, m)
         QKt_n = self.norm(QKt)
-        return QKt_n @ V
+        if QKt_n.is_sparse:
+            return sp.matmul(QKt_n, V)
+        else:
+            return QKt_n @ V

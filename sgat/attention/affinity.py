@@ -2,9 +2,9 @@
 
 """Affinities classes."""
 
-import torch
 import torch.nn as nn
 from math import sqrt
+from .. import sparse as sp
 
 
 class Affinity(nn.Module):
@@ -64,20 +64,7 @@ class DotProduct(Affinity):
             QKt = Q @ K.t()
             QKt = QKt if m is None else QKt * m
         else:
-            # Allowed attentions
-            Q_i, K_i = m._indices()
-
-            # Computing allowed values in QKt
-            Q_v = Q.index_select(0, Q_i)
-            K_v = K.index_select(0, K_i)
-            QKt_v = torch.bmm(
-                Q_v.view(len(Q_v), 1, -1),
-                K_v.view(len(K_v), -1, 1)
-            ).view(-1)
-
-            # Shaping as sparse matrix
-            _torch = torch.cuda if QKt_v.is_cuda else torch
-            QKt = _torch.sparse.FloatTensor(m._indices(), QKt_v, m.size())
+            QKt = sp.matmulmasked(Q, K.t(), m)
 
         if self.scaled:  # Apply scaling if specified
             QKt = QKt / sqrt(K.size(1))
