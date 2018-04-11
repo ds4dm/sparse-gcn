@@ -51,9 +51,7 @@ class Sum(Function):
 
     @staticmethod
     def forward(ctx, input, dims=None):
-
-        SparseTensorType = eval(input.type())
-        IdxTensorType = eval(input._indices().type())
+        _torch = torch.cuda if input.is_cuda else torch
 
         ndims = len(input.size())
         nvals = input._values().size(0)
@@ -68,7 +66,7 @@ class Sum(Function):
             assert len(np.unique(dims)) == len(dims)
             dims = np.sort(dims).tolist()
 
-        zero_idx = IdxTensorType(1).zero_().expand(nvals)
+        zero_idx = _torch.LongTensor(1).zero_().expand(nvals)
 
         indices = []
         size = []
@@ -83,11 +81,10 @@ class Sum(Function):
         indices = torch.stack(indices)
 
         ctx.save_for_backward(input._indices(), indices)
-        ctx.input_type = SparseTensorType
         ctx.input_nvals = nvals
         ctx.input_shape = input.shape
 
-        output = SparseTensorType(
+        output = _torch.sparse.FloatTensor(
             indices,
             input._values(),
             size,
@@ -97,25 +94,28 @@ class Sum(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
+        _torch = torch.cuda if grad_output.is_cuda else torch
+        
         input_indices, coalesced_indices = ctx.saved_tensors
 
         grad_input = None
         if ctx.needs_input_grad[0]:
             output_indices = grad_output._indices()
 
-            output_indices_dict = {
-                tuple(k): i for i, k in enumerate(
-                    output_indices.numpy().transpose())}
+            # assume input is coalesced and indices are sorted from first to last dimension
+            count = _torch.sparse.FloatTensor(
+                coalesced_indices,
+                _torch.FloatTensor(ctx.input_nvals).fill_(1),
+                ctx.input_shape).coalesce()._values()
 
-            out_to_in_map = [output_indices_dict[
-                tuple(k)] for k in
-                    coalesced_indices.numpy().transpose()]
+            out_to_in_map = _torch.LongTensor(np.repeat(
+                np.arange(grad_output._values().size(0)),
+                count))
 
-            grad_input = ctx.input_type(
+            grad_input = _torch.sparse.FloatTensor(
                 input_indices,
                 grad_output._values()[out_to_in_map],
-                ctx.input_shape
-            )
+                ctx.input_shape)
 
         return grad_input, None
 
