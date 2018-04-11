@@ -51,13 +51,13 @@ class Sum(Function):
 
     @staticmethod
     def forward(ctx, input, dims=None):
-        
+
         SparseTensorType = eval(input.type())
         IdxTensorType = eval(input._indices().type())
-        
+
         ndims = len(input.size())
         nvals = input._values().size(0)
-        
+
         if dims is None:
             dims=list(range(ndims))
         else:
@@ -67,7 +67,7 @@ class Sum(Function):
             assert np.all(dims < ndims)
             assert len(np.unique(dims)) == len(dims)
             dims = np.sort(dims).tolist()
-    
+
         zero_idx = IdxTensorType(1).zero_().expand(nvals)
 
         indices = []
@@ -79,14 +79,14 @@ class Sum(Function):
             else:
                 indices.append(zero_idx)
                 size.append(1)
-        
+
         indices = torch.stack(indices)
-        
+
         ctx.save_for_backward(input._indices(), indices)
         ctx.input_type = SparseTensorType
         ctx.input_nvals = nvals
         ctx.input_shape = input.shape
-        
+
         output = SparseTensorType(
             indices,
             input._values(),
@@ -106,7 +106,7 @@ class Sum(Function):
             output_indices_dict = {
                 tuple(k): i for i, k in enumerate(
                     output_indices.numpy().transpose())}
-            
+
             out_to_in_map = [output_indices_dict[
                 tuple(k)] for k in
                     coalesced_indices.numpy().transpose()]
@@ -124,3 +124,15 @@ build = Build.apply
 values = Values.apply
 sum = Sum.apply
 
+
+def matmulmasked(A, B, m):
+    idx, jdx = m._indices()
+    Av = A.index_select(0, idx)
+    Bv = B.t().index_select(0, jdx)
+
+    ABv = torch.bmm(
+        Av.view(Av.size(0), 1, -1),
+        Bv.view(Bv.size(0), -1, 1)
+    ).view(-1)
+
+    return build(m._indices(), ABv, (A.size(0), B.size(1)))
