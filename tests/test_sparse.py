@@ -116,6 +116,24 @@ class TestSparse(unittest.TestCase):
         grad_Ad, = grad(Md.sum(), self.A)
         self.assertEpsilonEqual(grad_As, grad_Ad, 1e-4)
 
+    def test_matmul(self):
+        # Check forward
+        A = sp.build(self.i, self.v)
+        Ms = sp.matmul(A, self.B)
+        Ad = Variable(A.to_dense(), requires_grad=True)
+        Md = Ad @ self.B
+        self.assertEpsilonEqual(Ms, Md, 1e-4)
+
+        # Check grad B
+        grad_Bs, = grad(Ms.sum(), self.B, retain_graph=True)
+        grad_Bd, = grad(Md.sum(), self.B, retain_graph=True)
+        self.assertEpsilonEqual(grad_Bs, grad_Bd, 1e-4)
+
+        # Check grad A
+        grad_As, = grad(Ms.sum(), A)
+        grad_Ad, = grad(Md.sum(), Ad)
+        self.assertEpsilonEqual(grad_As.to_dense(), grad_Ad, 1e-4)
+
 
 @unittest.skipUnless(torch.cuda.is_available(), "Cuda unavailable.")
 class TestSparseCuda(TestSparse):

@@ -120,9 +120,30 @@ class Sum(Function):
         return grad_input, None
 
 
+class MatMul(Function):
+    @staticmethod
+    def forward(ctx, A, B):
+        ctx.save_for_backward(A, B)
+        return A @ B
+
+    @ staticmethod
+    def backward(ctx, grad_output):
+        A, B = ctx.saved_tensors
+        grad_A = grad_B = None
+
+        if ctx.needs_input_grad[0]:
+            # values of A are not used, only its indexes
+            grad_A = matmulmasked(grad_output, B.t(), A)
+        if ctx.needs_input_grad[1]:
+            grad_B = A.t() @ grad_output
+
+        return grad_A, grad_B
+
+
 build = Build.apply
 values = Values.apply
 sum = Sum.apply
+matmul = MatMul.apply
 
 
 def matmulmasked(A, B, m):
