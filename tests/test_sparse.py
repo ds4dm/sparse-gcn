@@ -17,15 +17,22 @@ class TestSparse(unittest.TestCase):
         self.assertTrue(bool(diff.all()))
 
     def setUp(self):
-        self.i = torch.LongTensor([[1, 2, 0], [1, 4, 6]])
-        self.v = Variable(torch.rand(3), requires_grad=True)
-        self.A = Variable(torch.rand((3, 7)), requires_grad=True)
-        self.B = Variable(torch.rand((7, 5)), requires_grad=True)
+        vs = {}
+        vs['i'] = torch.LongTensor([[1, 2, 0], [1, 4, 6]])
+        vs['v'] = Variable(torch.rand(3), requires_grad=True)
+        self.s = (3, 7)
+        vs['A'] = Variable(torch.rand((3, 7)), requires_grad=True)
+        vs['B'] = Variable(torch.rand((7, 5)), requires_grad=True)
         m = torch.rand((3, 5)) > .5
         m_i = m.nonzero()
-        self.m = torch.sparse.FloatTensor(
+        vs['m'] = torch.sparse.FloatTensor(
             m_i.t(), torch.ones(len(m_i)), m.size()
         )
+        vs['sum_i'] = torch.LongTensor([[1, 4, 5], [0, 1, 0], [1, 7, 1]])
+        vs['sum_v'] = torch.FloatTensor([1, 2, 3])
+        self.sum_s = (10, 10, 10)
+        vs['sum_w'] = Variable(torch.FloatTensor([11, 15, 12]), requires_grad=True)
+        self.vars = vs
 
     @unittest.skip("Not implemented")
     def test_build(self):
@@ -36,16 +43,20 @@ class TestSparse(unittest.TestCase):
         raise NotImplementedError()
 
     def test_sparse_values(self):
-        v_hat = sp.values(sp.build(self.i, self.v))
-        self.assertTrue(torch.equal(v_hat.sum(), self.v.sum()))
-        g, = grad(v_hat.sum(), self.v)
+        i = self.vars['i']
+        v = self.vars['v']
+        s = self.s
+
+        v_hat = sp.values(sp.build(i, v, s))
+        self.assertTrue(torch.equal(v_hat.sum(), v.sum()))
+        g, = grad(v_hat.sum(), v)
         self.assertTrue(torch.equal(g, torch.ones_like(g)))
 
     def test_sum(self):
-        i = torch.LongTensor([[1, 4, 5], [0, 1, 0], [1, 7, 1]])
-        v = torch.FloatTensor([1, 2, 3])
-        s = (10, 10, 10)
-        w = Variable(torch.FloatTensor([11, 15, 12]), requires_grad=True)
+        i = self.vars['sum_i']
+        v = self.vars['sum_v']
+        s = self.sum_s
+        w = self.vars['sum_w']
 
         # dims=None
         x = sp.build(i, v*w, (10, 10, 10))
@@ -97,36 +108,45 @@ class TestSparse(unittest.TestCase):
         self.assertTrue(np.all(g.data == v.data))
 
     def test_matmulmasked(self):
-        Ms = sp.matmulmasked(self.A, self.B, self.m)
+        A = self.vars['A']
+        B = self.vars['B']
+        m = self.vars['m']
+
+        Ms = sp.matmulmasked(A, B, m)
 
         # Check type
         self.assertTrue(Ms.is_sparse)
 
         # Check forward
-        Md = (self.A @ self.B) * self.m.to_dense()
+        Md = (A @ B) * m.to_dense()
         self.assertEpsilonEqual(Ms.to_dense(), Md, 1e-4)
 
         # Check grad B
-        grad_Bs, = grad(sp.values(Ms).sum(), self.B, retain_graph=True)
-        grad_Bd, = grad(Md.sum(), self.B, retain_graph=True)
+        grad_Bs, = grad(sp.values(Ms).sum(), B, retain_graph=True)
+        grad_Bd, = grad(Md.sum(), B, retain_graph=True)
         self.assertEpsilonEqual(grad_Bs, grad_Bd, 1e-4)
 
         # Check grad A
-        grad_As, = grad(sp.values(Ms).sum(), self.A)
-        grad_Ad, = grad(Md.sum(), self.A)
+        grad_As, = grad(sp.values(Ms).sum(), A)
+        grad_Ad, = grad(Md.sum(), A)
         self.assertEpsilonEqual(grad_As, grad_Ad, 1e-4)
 
     def test_matmul(self):
+        i = self.vars['i']
+        v = self.vars['v']
+        B = self.vars['B']
+        s = self.s
+
         # Check forward
-        A = sp.build(self.i, self.v)
-        Ms = sp.matmul(A, self.B)
+        A = sp.build(i, v, s)
+        Ms = sp.matmul(A, B)
         Ad = Variable(A.to_dense(), requires_grad=True)
-        Md = Ad @ self.B
+        Md = Ad @ B
         self.assertEpsilonEqual(Ms, Md, 1e-4)
 
         # Check grad B
-        grad_Bs, = grad(Ms.sum(), self.B, retain_graph=True)
-        grad_Bd, = grad(Md.sum(), self.B, retain_graph=True)
+        grad_Bs, = grad(Ms.sum(), B, retain_graph=True)
+        grad_Bd, = grad(Md.sum(), B, retain_graph=True)
         self.assertEpsilonEqual(grad_Bs, grad_Bd, 1e-4)
 
         # Check grad A
@@ -139,4 +159,8 @@ class TestSparse(unittest.TestCase):
 class TestSparseCuda(TestSparse):
 
     def setUp(self):
-        raise NotImplementedError()
+        super().setUp()
+
+        for k, v in self.vars.items():
+            self.vars[k] = v.cuda()
+
