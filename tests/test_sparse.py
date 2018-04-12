@@ -39,7 +39,7 @@ class TestSparse(unittest.TestCase):
     def test_values(self):
         raise NotImplementedError()
 
-    def test_sparse_values(self):
+    def test_build_values(self):
         v_hat = sp.values(sp.build(self.i, self.v, self.s))
         self.assertTrue(torch.equal(v_hat.sum(), self.v.sum()))
         g, = grad(v_hat.sum(), self.v)
@@ -125,6 +125,18 @@ class TestSparse(unittest.TestCase):
         grad_As, = grad(Ms.sum(), A)
         grad_Ad, = grad(Md.sum(), Ad)
         self.assertEpsilonEqual(grad_As.to_dense(), grad_Ad, 1e-4)
+
+    def test_(self):
+        dtype = torch.cuda.FloatTensor if self.A.is_cuda else torch.FloatTensor
+        A = sp.build(self.i, self.w.exp(), self.s)
+        X = sp.matmul(A, self.B)
+
+        ones = torch.ones((A.size(1), 1)).type(dtype)
+        A_norm = sp.matmul(A, ones)
+        A_norm = A_norm.clamp(min=1e-12)  # avoid divide by zero
+        X /= A_norm.expand_as(X)
+
+        grad(X.sum(), self.w)
 
 
 @unittest.skipUnless(torch.cuda.is_available(), "Cuda unavailable.")
