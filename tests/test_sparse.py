@@ -17,7 +17,7 @@ class TestSparse(unittest.TestCase):
         self.assertTrue(bool(diff.all()))
 
     def setUp(self):
-        self.i = torch.LongTensor([[1, 2, 0], [1, 4, 6]])
+        self.i = torch.LongTensor([[0, 1, 2], [1, 4, 6]])
         self.v = Variable(torch.rand(3), requires_grad=True)
         self.s = (3, 7)
         self.A = Variable(torch.rand((3, 7)), requires_grad=True)
@@ -31,9 +31,23 @@ class TestSparse(unittest.TestCase):
         self.s3 = (10, 10, 10)
         self.w = Variable(torch.rand(3), requires_grad=True)
 
-    @unittest.skip("Not implemented")
     def test_build(self):
-        raise NotImplementedError()
+        i = self.i
+        v = self.v
+        s = self.s
+
+        sp.build(i, v, s)
+
+        inv_idx = torch.range(i.size(1)-1, 0, -1).long()
+        i = i[:, inv_idx]
+
+        try:
+            sp.build(i, v, s)
+            self.assertTrue(False)
+        except:
+            pass
+
+        sp.build(i, v, s, skip_check=True)
 
     @unittest.skip("Not implemented")
     def test_values(self):
