@@ -374,7 +374,7 @@ def matmulmasked(A, B, mask_idxs):
 
     Returns
     -------
-    SparseTensor
+    sparse.FloatTensor
         The sparse equivalent of `(A @ B) * M`.
 
     """
