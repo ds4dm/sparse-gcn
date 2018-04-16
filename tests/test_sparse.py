@@ -61,17 +61,18 @@ class TestSparse(unittest.TestCase):
 
     def test_sum(self):
         X = sp.build(self.i3, self.v * self.w, self.s3)
+        X = sp.mask(X)
 
         # dims=None
-        o = sp.sum(X)
+        o = X.sum()
         od = X.to_dense().sum()
-        self.assertTrue(np.all(o.to_dense() == od))
+        self.assertTrue(np.all(o.to_dense().data == od.data))
 
         g, = grad(sp.values(o).sum(), self.w, retain_graph=True)
         self.assertTrue(np.all(g.data == self.v.data))
 
         # dims=(0,)
-        o = sp.sum(X, (0,))
+        o = X.sum(dims=(0,))
         od = X.to_dense().sum(0, keepdim=True)
         self.assertTrue(np.all(o.to_dense().data == od.data))
 
@@ -79,7 +80,7 @@ class TestSparse(unittest.TestCase):
         self.assertTrue(np.all(g.data == self.v.data))
 
         # dims=(1,)
-        o = sp.sum(X, (1,))
+        o = X.sum(dims=(1,))
         od = X.to_dense().sum(1, keepdim=True)
         self.assertTrue(np.all(o.to_dense().data == od.data))
 
@@ -87,7 +88,7 @@ class TestSparse(unittest.TestCase):
         self.assertTrue(np.all(g.data == self.v.data))
 
         # dims=(2,)
-        o = sp.sum(X, (2,))
+        o = X.sum(dims=(2,))
         od = X.to_dense().sum(2, keepdim=True)
         self.assertTrue(np.all(o.to_dense().data == od.data))
 
@@ -95,7 +96,7 @@ class TestSparse(unittest.TestCase):
         self.assertTrue(np.all(g.data == self.v.data))
 
         # dims=(0, 2)
-        o = sp.sum(X, (0, 2))
+        o = X.sum(dims=(0, 2))
         od = X.to_dense().sum(0, keepdim=True).sum(2, keepdim=True)
         self.assertTrue(np.all(o.to_dense().data == od.data))
 
@@ -103,7 +104,7 @@ class TestSparse(unittest.TestCase):
         self.assertTrue(np.all(g.data == self.v.data))
 
     def test_matmulmasked(self):
-        Ms = sp.matmulmasked(self.A, self.B, self.m)
+        Ms = sp.matmulmasked(self.A, self.B, self.m._indices())
 
         # Check type
         self.assertTrue(Ms.is_sparse)
@@ -125,7 +126,7 @@ class TestSparse(unittest.TestCase):
     def test_matmul(self):
         # Check forward
         A = sp.build(self.i, self.v, self.s)
-        Ms = sp.matmul(A, self.B)
+        Ms = sp.mask(A).mm(self.B)
         Ad = Variable(A.to_dense(), requires_grad=True)
         Md = Ad @ self.B
         self.assertEpsilonEqual(Ms, Md, 1e-4)
@@ -143,10 +144,10 @@ class TestSparse(unittest.TestCase):
     def test_(self):
         dtype = torch.cuda.FloatTensor if self.A.is_cuda else torch.FloatTensor
         A = sp.build(self.i, self.w.exp(), self.s)
-        X = sp.matmul(A, self.B)
+        X = sp.mask(A).mm(self.B)
 
         ones = torch.ones((A.size(1), 1)).type(dtype)
-        A_norm = sp.matmul(A, ones)
+        A_norm = sp.mask(A).mm(ones)
         A_norm = A_norm.clamp(min=1e-12)  # avoid divide by zero
         X /= A_norm.expand_as(X)
 

@@ -32,7 +32,7 @@ class Build(Function):
             Values tensor as given to `sparse.FloatTensor`.
         *args
             Additional options given to `sparse.FloatTensor`.
-        skip_check: boolean
+        skip_check : boolean
             Decides wether to skip the check for coalesced indices
             on the input. May be useful to save computations in the
             forward pass.
@@ -62,18 +62,16 @@ class Build(Function):
         Parameters
         ----------
         output_grad : sparse.FloatTensor
-            The gradient of some quantity with regard to the output of this
-            function.
+            The gradient of something w.r.t the output of forward().
 
         Returns
         -------
         None
-            The gradient with regard to the indices is not computed.
+            The gradient w.r.t the indices is not computed.
         FloatTensor
-            The gradient of the same quantity with regard to the values of the
-            sparse tensor.
+            The gradient w.r.t the values of the sparse tensor.
         None
-            Gradients with regard to additional options are not computed.
+            Gradients w.r.t additional options are not computed.
 
         """
         v_grad = None
@@ -99,7 +97,7 @@ class Values(Function):
         -------
         FloatTensor
             The values of the sparse tensor i.e. the ones actually stored
-            in the representation
+            in the internal representation.
 
         """
         ctx.save_for_backward(A._indices())
@@ -118,9 +116,7 @@ class Values(Function):
         Returns
         -------
         sparse.FloatTensor
-            The gradient of the same thing w.r.t to the input sparse
-            tensor. Note that this is not the true gradient but only the
-            gradient w.r.t the values defined in the sparse tensor.
+            The gradient w.r.t to the input sparse tensor.
 
         """
         i, = ctx.saved_tensors
@@ -134,8 +130,11 @@ class Values(Function):
         return A_grad
 
 
-class Sum(Function):
-    """See sum()."""
+class MaskedSum(Function):
+    """
+    Sum of a masked matrix `A=A_*M`.
+    
+    """
 
     @staticmethod
     def forward(ctx, input, dims):
@@ -144,8 +143,8 @@ class Sum(Function):
         Parameters
         ----------
         input : sparse.FloatTensor
-            The sparse tensor, must be coalesced.
-        dims: tuple of ints
+            A sparse tensor representing `A_*M`, must be coalesced.
+        dims : tuple of ints
             The dimensions over which to sum, or `None` to
             sum over all dimensions.
 
@@ -203,7 +202,7 @@ class Sum(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        """Backward pass.
+        """Backward computation.
 
         Parameters
         ----------
@@ -213,9 +212,7 @@ class Sum(Function):
         Returns
         -------
         sparse.FloatTensor
-            The gradient of the same thing w.r.t to the input sparse
-            tensor. Note that this is not the true gradient but only the
-            gradient w.r.t the values defined in the sparse tensor.
+            The gradient of the same thing w.r.t to `A_`.
 
         """
         _torch = torch.cuda if grad_output.is_cuda else torch
@@ -247,8 +244,12 @@ class Sum(Function):
         return grad_input, None
 
 
-class MatMul(Function):
-    """See matmul()."""
+class MaskedMatMul(Function):
+    """
+    Masked matrix multiplication between a masked matrix `A=A_*M` and a dense
+    matrix `B`.
+    
+    """
 
     @staticmethod
     def forward(ctx, A, B):
@@ -257,14 +258,14 @@ class MatMul(Function):
         Parameters
         ----------
         A : sparse.FloatTensor
-            A sparse matrix.
+            A sparse matrix representing `A_*M`.
         B : FloatTensor
             A dense matrix
 
         Returns
         -------
         FloatTensor
-            The computation of `A @ B`
+            The result of `(A_*M) @ B`
 
         """
         ctx.save_for_backward(A, B)
@@ -277,17 +278,14 @@ class MatMul(Function):
         Parameters
         ----------
         output_grad : FloatTensor
-            The gradient of some quantity with regard to the output of this
-            function.
+            The gradient of something w.r.t the output of forward().
 
         Returns
         -------
         sparse.FloatTensor
-            The gradient of the same quantity with regard to the input sparse
-            tensor `A`. Note that this is not the true gradient but only the
-            gradient for the values defined in the sparse tensor.
+            The gradient of the same thing w.r.t `A_`.
         FloatTensor
-            The gradient of the same quantity with regard to `B`.
+            The gradient of the same thing w.r.t `B`.
 
         """
         A, B = ctx.saved_tensors
@@ -295,7 +293,7 @@ class MatMul(Function):
 
         if ctx.needs_input_grad[0]:
             # values of A are not used, only its indexes
-            grad_A = matmulmasked(grad_output, B.t(), A)
+            grad_A = matmulmasked(grad_output, B.t(), A._indices())
         if ctx.needs_input_grad[1]:
             grad_B = A.t() @ grad_output
 
@@ -321,7 +319,7 @@ def build(i, v, *args, skip_check=False):
         Values tensor as given to `sparse.FloatTensor`.
     *args
         Additional options given to `sparse.FloatTensor`.
-    skip_check: boolean
+    skip_check : boolean
         Decides wether to skip the check for coalesced indices
         on the input. May be useful to save computations in the
         forward pass.
@@ -336,96 +334,51 @@ def build(i, v, *args, skip_check=False):
 
 
 def values(t):
-    """Extracts the values stored in a sparse tensor.
-
-    The values are the values actually kept in memory.
-    This is equivalent to calling `t._values()` with
+    """Extracts the values stored in a sparse tensor. The values are those
+    actually kept in memory. This is equivalent to calling `t._values()` with
     differentiation support.
 
     Parameters
     ----------
     t : sparse.FloatTensor
-        The sparse tensor.
+        A sparse tensor.
 
     Returns
     -------
     FloatTensor
         One-dimensional FloatTensor
+
     """
     return Values.apply(t)
 
 
-def sum(t, dims=None):
-    """
-    Sums a sparse tensor over some specific or all dimensions.
-
-    Parameters
-    ----------
-    t : sparse.FloatTensor
-        The sparse tensor, must be coalesced.
-    dims: tuple of ints
-        The dimensions over which to sum, or `None` to
-        sum over all dimensions.
-
-    Returns
-    -------
-    sparse.FloatTensor
-        The sparse tensor summed over dimensions in `dims`.
-        Note that the original dimensions are kept but
-        shrinked to size 1.
-
-    """
-    return Sum.apply(t, dims)
-
-
-def matmul(A, B):
-    """
-    Matrix multiplication with a sparse tensor.
-
-    This is equivalent to calling `A @ B` where `A` is
-    sparse and `B` is dense, with differentiation support
-    w.r.t both `A` and `B`.
-
-    Parameters
-    ----------
-    A : sparse.FloatTensor
-        A sparse matrix.
-    B : FloatTensor
-        A dense matrix
-
-    Returns
-    -------
-    FloatTensor
-        The dense matrix resulting from `A @ B`
-
-    """
-    return MatMul.apply(A, B)
-
-
-def matmulmasked(A, B, m):
+def matmulmasked(A, B, mask_idxs):
     """Matrix multiplication and mask.
 
-    This function computes `(A @ B) * m` in a sparse way. Only the values with
-    a positive mask are computed by levraging sparse computations.
-    Note that this function yields a small numeric difference from its
-    equivalent dense version.
+    This function computes `(A @ B) * M` efficitently by leveraging sparse
+    computations, where `M` is an implicit constant binary matrix with 1
+    values at indices in `mask_idxs`. Only the values of non masked-out
+    elements are computed and returned in the form of a sparse tensor. Note
+    that as a result one will observe a small numeric difference compared to
+    the equivalent dense operation.
 
     Parameters
     ----------
     A : FloatTensor
-        FloatTensor of size (n, p)
+        Matrix of size (n, p)
     B : FloatTensor
-        FloatTensor of size (p, m)
-    m : sparse.FloatTensor of size (n, m)
-        The mask defining the computation to do.
+        Matrix of size (p, m)
+    mask_idxs : LongTensor
+        Matrix of size (2, n_ones) whose columns correspond to the indices of
+        the 1 values in the binary mask `M`.
 
     Returns
     -------
-    sparse.FloatTensor
-        The sparse equivalent of `(A @ B) * m`.
+    SparseTensor
+        The sparse equivalent of `(A @ B) * M`.
 
     """
-    idx, jdx = m._indices()
+    idx, jdx = mask_idxs
     Av = A.index_select(0, idx)
     Bv = B.t().index_select(0, jdx)
 
@@ -434,4 +387,168 @@ def matmulmasked(A, B, m):
         Bv.view(Bv.size(0), -1, 1)
     ).view(-1)
 
-    return build(m._indices(), ABv, (A.size(0), B.size(1)))
+    return build(mask_idxs, ABv, (A.size(0), B.size(1)))
+
+
+def mask(A_):
+    return MaskedTensor(A_)
+
+
+class MaskedTensor:
+    """
+    Represents a tensor `A` resulting from the application of an implicit
+    (constant) binary mask `M` to an initial tensor `A_`, i.e. `A=A_*M`.
+    Internally, only the non-masked entries of `A_` and their indices are
+    stored in the form of a sparse tensor. As a result, derivatives w.r.t the
+    original tensor `A_` are sparse since masked-out elements have zero
+    gradient.
+
+    """
+
+    def __init__(self, A_):
+        """
+        Builds the masked tensor `A=A_*M` from the sparse tensor `A_`, where
+        the binary mask `M` is implicitely defined so that it retains only the
+        non-sparse elements of `A_`. Due to implementation details, `A_` is
+        required to be coalesced.
+
+        Parameters
+        ----------
+        A_: sparse.FloatTensor
+            A coalesced sparse tensor.
+
+        """
+        if not A_.is_coalesced():
+            raise Exception("MaskedTensor requires a coalesced sparse tensor.")
+        self.A_ = A_
+
+    def clone(self):
+        return mask(self.A_.clone())
+
+    def dim(self):
+        return self.A_.dim()
+
+    def size(self):
+        return self.A_.size()
+
+    def t(self):
+        # mask can be propagated harmlessly
+        return mask(self.A_.t())
+
+    def unmask(self):
+        """
+        Removes the implicit mask on `A`.
+
+        Returns
+        -------
+        sparse.FloatTensor
+            The original sparse matrix `A_`.
+
+        """
+        return self.A_
+
+    def values(self):
+        """
+        Extracts the values of the non-masked elements in the form of a
+        flattened tensor.
+
+        Returns
+        -------
+        FloatTensor
+            One-dimensional tensor of length `n`, where `n` is the number of
+            non-maked elements in `A`.
+
+        """
+        return values(self.A_)
+
+    def indices(self):
+        """
+        Extracts the indices of the non-masked elements in `A`.
+
+        Returns
+        -------
+        LongTensor
+            Matrix tensor whose `i`-th colum is the index of the `i`-th
+            non-masked element.
+
+        """
+        return self.A_._indices()
+
+    def to_dense(self):
+        return self.A_.to_dense()  # non-differentiable
+
+    def sum(self, dims=None):
+        """
+        Sums the masked tensor over some specific or all dimensions.
+
+        Parameters
+        ----------
+        dims: tuple of ints
+            The dimensions over which to sum, or `None` to sum over all
+            dimensions (default).
+
+        Returns
+        -------
+        sparse.FloatTensor
+            The sparse tensor summed over dimensions in `dims`. Note that the
+            original dimensions are kept but shrinked to size 1.
+
+        """
+        return MaskedSum.apply(self.A_, dims)
+
+    def mm(self, B):
+        """
+        Matrix multiplication with a dense tensor. Returns a dense tensor.
+
+        This is equivalent to calling `A @ B` where `A` is sparse and `B` is
+        dense, with differentiation support w.r.t both `A_` and `B`.
+
+        Parameters
+        ----------
+        B: FloatTensor
+            A dense matrix.
+
+        Returns
+        -------
+        FloatTensor
+            The dense matrix resulting from `A @ B`
+
+        """
+        return MaskedMatMul.apply(self.A_, B)
+
+    def add_m(self, c):
+        """Adds c then re-applies the mask."""
+        return mask(build(
+            self.A_._indices(),
+            self.values() + c,
+            self.A_.size(),
+            skip_check=True))
+
+    def exp_m(self):
+        """Exponentiates elements then re-applies the mask."""
+        return mask(build(
+            self.A_._indices(),
+            self.values().exp(),
+            self.A_.size(),
+            skip_check=True))
+
+    def softmax_m(self, dim=1):
+        """Exponentiates elements, re-applies the mask, then normalize."""
+        raise Exception("Not implemented yet.")
+        # x = self.values()
+        # x = x - x.max().detach()
+        # x = x.exp()
+        # x = build(
+        #     self.A_._indices(),
+        #     x,
+        #     self.A_.size(),
+        #     skip_check=True)
+        # x = x / masked_sum(x)...
+        return mask(x)
+
+    def type(self):
+        return self.__module__ + "." + self.__class__.__name__
+
+    def __repr__(self):
+        return self.type() + " represented as a " + repr(self.A_)
+
