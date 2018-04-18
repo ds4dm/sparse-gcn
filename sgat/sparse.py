@@ -7,7 +7,7 @@ available in PyTorch.
 We implement the differentiation of these function on their support. More
 precisely: the gradient of a function with regard to a sparse input is not
 necessarily sparse. Here we actually use the PyTorch sparse representation
-as a mask. This means we don't want computation to occure on values not defined
+as a mask. This means we don't want computation to occur on values not defined
 by the mask.
 """
 
@@ -18,20 +18,11 @@ import numpy as np
 
 
 class Build(Function):
-    """Build a sparse Tensor.
-
-    This class defines a function that construct a pytorch sparse tensor (on
-    the same device as the input).
-    The differentiation is implemented with regard to the values (as given to
-    a sparse tensor).
-
-    This is similar to calling `sparse.FloatTensor(i, v)`` except that this
-    differentiable with regard to `v`.
-    """
+    """See build() function."""
 
     @staticmethod
-    def forward(ctx, i, v, *args, **kwargs):
-        """Compute the function.
+    def forward(ctx, i, v, skip_check, *args):
+        """Forward computation.
 
         Parameters
         ----------
@@ -39,8 +30,12 @@ class Build(Function):
             Indices tensor as given to `sparse.FloatTensor`.
         v : FloatTensor
             Values tensor as given to `sparse.FloatTensor`.
-        *args, **kwargs
+        *args
             Additional options given to `sparse.FloatTensor`.
+        skip_check: boolean
+            Decides wether to skip the check for coalesced indices
+            on the input. May be useful to save computations in the
+            forward pass.
 
         Returns
         -------
@@ -48,14 +43,21 @@ class Build(Function):
             A new sparse tensor.
 
         """
-        ctx.n_options = len(args) + len(kwargs)
-        _torch = torch.cuda if v.is_cuda else torch
+        ctx.n_options = len(args)
 
-        return _torch.sparse.FloatTensor(i, v, *args, **kwargs)
+        _torch = torch.cuda if v.is_cuda else torch
+        output = _torch.sparse.FloatTensor(i, v, *args).coalesce()
+
+        if not skip_check and (
+                not i.shape == output._indices().shape or
+                not i.eq(output._indices()).all()):
+            raise Exception("Input indices must be in coalesced form.")
+
+        return output
 
     @staticmethod
     def backward(ctx, output_grad):
-        """Compute the backpropagation.
+        """Backward computation.
 
         Parameters
         ----------
@@ -76,23 +78,17 @@ class Build(Function):
         """
         v_grad = None
         if ctx.needs_input_grad[1]:
-            v_grad = output_grad._values()
+            v_grad = output_grad.coalesce()._values()
 
-        return (None, v_grad) + (None, ) * ctx.n_options
+        return (None, v_grad, None) + (None, ) * ctx.n_options
 
 
 class Values(Function):
-    """Extract the values of a sparse tensor.
-
-    This class defines a function that extract the values pof a sparse tensor.
-    The values are the values actually kept in memory.
-    This is equivalent to calling `my_sparse_tensor._values()` expcept that the
-    function is differentiable.
-    """
+    """See values()."""
 
     @staticmethod
     def forward(ctx, A):
-        """Compute the function.
+        """Forward computation.
 
         Parameters
         ----------
@@ -112,20 +108,19 @@ class Values(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        """Compute the backpropagation.
+        """Backward computation.
 
         Parameters
         ----------
         output_grad : FloatTensor
-            The gradient of some quantity with regard to the output of this
-            function.
+            The gradient of something w.r.t the output of forward().
 
         Returns
         -------
         sparse.FloatTensor
-            The gradient of the same quantity with regard to the input sparse
+            The gradient of the same thing w.r.t to the input sparse
             tensor. Note that this is not the true gradient but only the
-            gradient for the values defined in the sparse tensor.
+            gradient w.r.t the values defined in the sparse tensor.
 
         """
         i, = ctx.saved_tensors
@@ -140,9 +135,31 @@ class Values(Function):
 
 
 class Sum(Function):
+    """See sum()."""
 
     @staticmethod
-    def forward(ctx, input, dims=None):
+    def forward(ctx, input, dims):
+        """Forward computation.
+
+        Parameters
+        ----------
+        input : sparse.FloatTensor
+            The sparse tensor, must be coalesced.
+        dims: tuple of ints
+            The dimensions over which to sum, or `None` to
+            sum over all dimensions.
+
+        Returns
+        -------
+        sparse.FloatTensor
+            The sparse tensor summed over dimensions in `dims`.
+            Note that the original dimensions are kept but
+            shrinked to size 1.
+
+        """
+        if not input.is_coalesced():
+            raise Exception("Sparse input must be coalesced.")
+
         _torch = torch.cuda if input.is_cuda else torch
 
         ndims = len(input.size())
@@ -186,15 +203,33 @@ class Sum(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
+        """Backward pass.
+
+        Parameters
+        ----------
+        output_grad : FloatTensor
+            The gradient of something w.r.t the output of forward().
+
+        Returns
+        -------
+        sparse.FloatTensor
+            The gradient of the same thing w.r.t to the input sparse
+            tensor. Note that this is not the true gradient but only the
+            gradient w.r.t the values defined in the sparse tensor.
+
+        """
         _torch = torch.cuda if grad_output.is_cuda else torch
         
         input_indices, coalesced_indices = ctx.saved_tensors
 
         grad_input = None
         if ctx.needs_input_grad[0]:
+            grad_output = grad_output.coalesce()
+
             output_indices = grad_output._indices()
 
-            # assume input is coalesced and indices are sorted from first to last dimension
+            # assumes input is coalesced, which implies the indices are
+            # sorted from first to last dimension
             count = _torch.sparse.FloatTensor(
                 coalesced_indices,
                 _torch.FloatTensor(ctx.input_nvals).fill_(1),
@@ -213,16 +248,11 @@ class Sum(Function):
 
 
 class MatMul(Function):
-    """Matrix multiplication with a sparse tensor.
-
-    This class defines a function compute `A @ B` where `A` is sparse and `B`
-    is dense. This is differentiable with regard to `B` and to the values of
-    `A`.
-    """
+    """See matmul()."""
 
     @staticmethod
     def forward(ctx, A, B):
-        """Compute the function.
+        """Forward computation.
 
         Parameters
         ----------
@@ -242,7 +272,7 @@ class MatMul(Function):
 
     @ staticmethod
     def backward(ctx, grad_output):
-        """Compute the backpropagation.
+        """Backward computation.
 
         Parameters
         ----------
@@ -272,11 +302,104 @@ class MatMul(Function):
         return grad_A, grad_B
 
 
-# We alias the function applications
-build = Build.apply
-values = Values.apply
-sum = Sum.apply
-matmul = MatMul.apply
+# define function aliases, useful since Function.apply()
+# does not support named arguments
+def build(i, v, *args, skip_check=False):
+    """Builds a sparse Tensor.
+
+    Constructs a pytorch sparse tensor (on the same device as
+    the input). The derivatives are computed w.r.t the values
+    (as given to a sparse tensor). This is similar to calling
+    `sparse.FloatTensor(i, v, *args)` with differentiation
+    support.
+
+    Parameters
+    ----------
+    i : LongTensor
+        Indices tensor as given to `sparse.FloatTensor`.
+    v : FloatTensor
+        Values tensor as given to `sparse.FloatTensor`.
+    *args
+        Additional options given to `sparse.FloatTensor`.
+    skip_check: boolean
+        Decides wether to skip the check for coalesced indices
+        on the input. May be useful to save computations in the
+        forward pass.
+
+    Returns
+    -------
+    sparse.FloatTensor
+        A new sparse tensor.
+
+    """
+    return Build.apply(i, v, skip_check, *args)
+
+
+def values(t):
+    """Extracts the values stored in a sparse tensor.
+
+    The values are the values actually kept in memory.
+    This is equivalent to calling `t._values()` with
+    differentiation support.
+
+    Parameters
+    ----------
+    t : sparse.FloatTensor
+        The sparse tensor.
+
+    Returns
+    -------
+    FloatTensor
+        One-dimensional FloatTensor
+    """
+    return Values.apply(t)
+
+
+def sum(t, dims=None):
+    """
+    Sums a sparse tensor over some specific or all dimensions.
+
+    Parameters
+    ----------
+    t : sparse.FloatTensor
+        The sparse tensor, must be coalesced.
+    dims: tuple of ints
+        The dimensions over which to sum, or `None` to
+        sum over all dimensions.
+
+    Returns
+    -------
+    sparse.FloatTensor
+        The sparse tensor summed over dimensions in `dims`.
+        Note that the original dimensions are kept but
+        shrinked to size 1.
+
+    """
+    return Sum.apply(t, dims)
+
+
+def matmul(A, B):
+    """
+    Matrix multiplication with a sparse tensor.
+
+    This is equivalent to calling `A @ B` where `A` is
+    sparse and `B` is dense, with differentiation support
+    w.r.t both `A` and `B`.
+
+    Parameters
+    ----------
+    A : sparse.FloatTensor
+        A sparse matrix.
+    B : FloatTensor
+        A dense matrix
+
+    Returns
+    -------
+    FloatTensor
+        The dense matrix resulting from `A @ B`
+
+    """
+    return MatMul.apply(A, B)
 
 
 def matmulmasked(A, B, m):
