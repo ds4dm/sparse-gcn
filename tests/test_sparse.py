@@ -31,103 +31,16 @@ class TestSparse(unittest.TestCase):
         self.s3 = (10, 10, 10)
         self.w = Variable(torch.rand(3), requires_grad=True)
 
-    def test_build(self):
-        i = self.i
-        v = self.v
-        s = self.s
-
-        sp.build(i, v, s)
-
-        inv_idx = torch.range(i.size(1)-1, 0, -1).long()
-        i = i[:, inv_idx]
-
-        try:
-            sp.build(i, v, s)
-            self.assertTrue(False)
-        except:
-            pass
-
-        sp.build(i, v, s, skip_check=True)
-
-    @unittest.skip("Not implemented")
-    def test_values(self):
-        raise NotImplementedError()
-
-    def test_build_values(self):
-        v_hat = sp.values(sp.build(self.i, self.v, self.s))
-        self.assertTrue(torch.equal(v_hat.sum(), self.v.sum()))
-        g, = grad(v_hat.sum(), self.v)
-        self.assertTrue(torch.equal(g, torch.ones_like(g)))
-
-    def test_sum(self):
-        X = sp.build(self.i3, self.v * self.w, self.s3)
-        X = sp.mask(X)
-
-        # dims=None
-        o = X.sum()
-        od = X.to_dense().sum()
-        self.assertTrue(np.all(o.to_dense().data == od.data))
-
-        g, = grad(sp.values(o).sum(), self.w, retain_graph=True)
-        self.assertTrue(np.all(g.data == self.v.data))
-
-        # dims=(0,)
-        o = X.sum(dims=(0,))
-        od = X.to_dense().sum(0, keepdim=True)
-        self.assertTrue(np.all(o.to_dense().data == od.data))
-
-        g, = grad(sp.values(o).sum(), self.w, retain_graph=True)
-        self.assertTrue(np.all(g.data == self.v.data))
-
-        # dims=(1,)
-        o = X.sum(dims=(1,))
-        od = X.to_dense().sum(1, keepdim=True)
-        self.assertTrue(np.all(o.to_dense().data == od.data))
-
-        g, = grad(sp.values(o).sum(), self.w, retain_graph=True)
-        self.assertTrue(np.all(g.data == self.v.data))
-
-        # dims=(2,)
-        o = X.sum(dims=(2,))
-        od = X.to_dense().sum(2, keepdim=True)
-        self.assertTrue(np.all(o.to_dense().data == od.data))
-
-        g, = grad(sp.values(o).sum(), self.w, retain_graph=True)
-        self.assertTrue(np.all(g.data == self.v.data))
-
-        # dims=(0, 2)
-        o = X.sum(dims=(0, 2))
-        od = X.to_dense().sum(0, keepdim=True).sum(2, keepdim=True)
-        self.assertTrue(np.all(o.to_dense().data == od.data))
-
-        g, = grad(sp.values(o).sum(), self.w)
-        self.assertTrue(np.all(g.data == self.v.data))
-
-    def test_matmulmasked(self):
-        Ms = sp.matmulmasked(self.A, self.B, self.m._indices())
-
-        # Check type
-        self.assertTrue(Ms.is_sparse)
-
-        # Check forward
-        Md = (self.A @ self.B) * self.m.to_dense()
-        self.assertEpsilonEqual(Ms.to_dense(), Md, 1e-4)
-
-        # Check grad B
-        grad_Bs, = grad(sp.values(Ms).sum(), self.B, retain_graph=True)
-        grad_Bd, = grad(Md.sum(), self.B, retain_graph=True)
-        self.assertEpsilonEqual(grad_Bs, grad_Bd, 1e-4)
-
-        # Check grad A
-        grad_As, = grad(sp.values(Ms).sum(), self.A)
-        grad_Ad, = grad(Md.sum(), self.A)
-        self.assertEpsilonEqual(grad_As, grad_Ad, 1e-4)
-
     def test_matmul(self):
-        # Check forward
-        A = sp.build(self.i, self.v, self.s)
-        Ms = sp.mask(A).mm(self.B)
+        Ai = self.i
+        Av = self.v
+        As = self.s
+
+        A = sp.mask(Ai, Av, As)
         Ad = Variable(A.to_dense(), requires_grad=True)
+
+        # Check forward
+        Ms = A.mm(self.B)
         Md = Ad @ self.B
         self.assertEpsilonEqual(Ms, Md, 1e-4)
 
@@ -137,21 +50,33 @@ class TestSparse(unittest.TestCase):
         self.assertEpsilonEqual(grad_Bs, grad_Bd, 1e-4)
 
         # Check grad A
-        grad_As, = grad(Ms.sum(), A)
+        grad_Av, = grad(Ms.sum(), Av)
         grad_Ad, = grad(Md.sum(), Ad)
-        self.assertEpsilonEqual(grad_As.to_dense(), grad_Ad, 1e-4)
+        self.assertEpsilonEqual(grad_Av, grad_Ad[Ai[0], Ai[1]], 1e-4)
 
-    def test_(self):
-        dtype = torch.cuda.FloatTensor if self.A.is_cuda else torch.FloatTensor
-        A = sp.build(self.i, self.w.exp(), self.s)
-        X = sp.mask(A).mm(self.B)
+    def test_sum(self):
+        Ai = self.i
+        Av = self.v
+        As = self.s
 
-        ones = torch.ones((A.size(1), 1)).type(dtype)
-        A_norm = sp.mask(A).mm(ones)
-        A_norm = A_norm.clamp(min=1e-12)  # avoid divide by zero
-        X /= A_norm.expand_as(X)
+        A = sp.mask(Ai, Av, As)
+        Ad = Variable(A.to_dense(), requires_grad=True)
 
-        grad(X.sum(), self.w)
+        for dim in (None, 0, 1):
+            for keepdim in (True, False):
+                # Check forward
+                sum_kwargs = {} if dim is None else {
+                    'dim': dim,
+                    'keepdim': keepdim,
+                }
+                Ss = A.sum(**sum_kwargs)
+                Sd = Ad.sum(**sum_kwargs)
+                self.assertEpsilonEqual(Ss, Sd, 1e-4)
+
+                # Check grad
+                grad_Av, = grad(Ss.sum(), Av, retain_graph=True)
+                grad_Ad, = grad(Sd.sum(), Ad, retain_graph=True)
+                self.assertEpsilonEqual(grad_Av, grad_Ad[Ai[0], Ai[1]], 1e-4)
 
 
 @unittest.skipUnless(torch.cuda.is_available(), "Cuda unavailable.")
