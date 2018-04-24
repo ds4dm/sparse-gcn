@@ -110,9 +110,14 @@ def masked_mm(A, B, mask_idxs):
 
     Returns
     -------
+<<<<<<< HEAD
     FloatTensor
         The non-masked elements of `(A @ B) * M`, i.e. those at indices
         `mask_idxs`.
+=======
+    sparse.FloatTensor
+        The sparse equivalent of `(A @ B) * M`.
+>>>>>>> 1c98646b7a126c162ffde92204d3b81f85928fda
 
     """
     idx, jdx = mask_idxs
