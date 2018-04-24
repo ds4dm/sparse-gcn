@@ -31,7 +31,28 @@ class TestSparse(unittest.TestCase):
         self.s3 = (10, 10, 10)
         self.w = Variable(torch.rand(3), requires_grad=True)
 
-    def test_matmul(self):
+    def test_masked_mm(self):
+        A = self.A
+        B = self.B
+        Mi = self.m._indices()
+        M = self.m.to_dense()
+
+        # Check forward
+        Cv = sp.masked_mm(A, B, Mi)
+        Cd = (A @ B) * M
+        self.assertEpsilonEqual(Cv, Cd[Mi[0], Mi[1]], 1e-4)
+
+        # Check grad B
+        grad_Bs, = grad(Cv.sum(), B, retain_graph=True)
+        grad_Bd, = grad(Cd.sum(), B, retain_graph=True)
+        self.assertEpsilonEqual(grad_Bs, grad_Bd, 1e-4)
+
+        # Check grad A
+        grad_As, = grad(Cv.sum(), A)
+        grad_Ad, = grad(Cd.sum(), A)
+        self.assertEpsilonEqual(grad_As, grad_Ad, 1e-4)
+
+    def test_mm(self):
         Ai = self.i
         Av = self.v
         As = self.s
