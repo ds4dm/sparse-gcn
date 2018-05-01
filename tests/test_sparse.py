@@ -30,6 +30,15 @@ class TestSparse(unittest.TestCase):
         self.i3 = torch.LongTensor([[1, 4, 5], [0, 1, 0], [1, 7, 1]])
         self.s3 = (10, 10, 10)
         self.w = Variable(torch.rand(3), requires_grad=True)
+        
+        self.sum_Ai = torch.LongTensor([[0, 0, 1, 1, 2], [1, 3, 0, 0, 2], [5, 2, 3, 0, 2]])
+        self.sum_Av = Variable(torch.FloatTensor([
+            [-4.5,  8.0,  2.8],
+            [ 7.0, -0.5,  4.0],
+            [ 2.7,  3.1, -8.1],
+            [-1.0, -1.2,  5.4],
+            [ 0.4, -2.2,  1.5]]), requires_grad=True)
+        self.sum_As = (4, 5, 6, 3)
 
     def test_masked_mm(self):
         A = self.A
@@ -76,28 +85,34 @@ class TestSparse(unittest.TestCase):
         self.assertEpsilonEqual(grad_Av, grad_Ad[Ai[0], Ai[1]], 1e-4)
 
     def test_sum(self):
-        Ai = self.i
-        Av = self.v
-        As = self.s
+        Ai = self.sum_Ai
+        Av = self.sum_Av
+        As = self.sum_As
 
         A = sp.mask(Ai, Av, As)
         Ad = Variable(A.to_dense(), requires_grad=True)
 
-        for dim in (None, 0, 1):
-            for keepdim in (True, False):
+        for keepdims in (True, False):
+            for dims in (None, (0, ), (1, ), (2, ),
+                         (1, 2), (2, 0), (0, 1, 2)):
+
                 # Check forward
-                sum_kwargs = {} if dim is None else {
-                    'dim': dim,
-                    'keepdim': keepdim,
-                }
-                Ss = A.sum(**sum_kwargs)
-                Sd = Ad.sum(**sum_kwargs)
+                Ss = A.sum(dims, keepdims)
+                Sd = Ad
+                if dims is None:
+                    dims = range(Ai.size(0))
+                dims = np.flip(np.sort(dims), 0)
+                for i, d in enumerate(dims):
+                    Sd = Sd.sum(int(d), keepdim=keepdims)
+
                 self.assertEpsilonEqual(Ss, Sd, 1e-4)
 
                 # Check grad
                 grad_Av, = grad(Ss.sum(), Av, retain_graph=True)
                 grad_Ad, = grad(Sd.sum(), Ad, retain_graph=True)
-                self.assertEpsilonEqual(grad_Av, grad_Ad[Ai[0], Ai[1]], 1e-4)
+
+                self.assertEpsilonEqual(
+                    grad_Av, grad_Ad[[idxs for idxs in Ai]], 1e-4)
 
 
 @unittest.skipUnless(torch.cuda.is_available(), "Cuda unavailable.")

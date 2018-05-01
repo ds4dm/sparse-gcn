@@ -86,6 +86,81 @@ class MaskedMatMul(Function):
         return None, grad_Av, None, grad_B
 
 
+class Sum(Function):
+    """
+    Summation over a masked tensor `A=A_*M`. Returns a dense tensor.
+    """
+
+    @staticmethod
+    def forward(ctx, Ai, Av, As, dims=None, keepdims=False):
+        n_sdims = Ai.size(0)  # sparse dims
+        n_ddims = Av.dim() - 1  # dense dims
+        sshape = As[:n_sdims]
+        dshape = As[n_sdims:]
+        
+        if dims is not None:
+            # safety check on dims
+            dims = np.asarray(dims)
+            
+            assert len(dims) > 0
+            assert np.all(dims >= 0)
+            assert np.all(dims < n_sdims)
+            assert len(np.unique(dims)) == len(dims)
+
+            if len(dims) == n_sdims:
+                dims = None
+            else:
+                dims = np.sort(dims).tolist()
+
+        ctx.dims = dims
+
+        if dims is None:
+            # sum over all sparse dimensions
+            ctx.Av_size = Av.size()
+            output = Av.sum(dim=0)
+            
+            if keepdims:
+                new_shape = (1, ) * n_sdims + dshape
+                output = output.view(new_shape)
+
+        else:
+            # sum over dims
+            sdim_is_summed = np.isin(
+                np.arange(n_sdims), dims, assume_unique=True)
+            remaining_sdims = np.where(sdim_is_summed == False)[0].tolist()
+
+            sparse_indices = Ai[remaining_sdims]
+            squeezed_shape = tuple(As[d] for d in remaining_sdims) + dshape
+
+            ctx.save_for_backward(sparse_indices)
+            ctx.squeezed_shape = squeezed_shape
+            output = ivs_to_sparse(sparse_indices, Av, squeezed_shape,
+                                   check_coalesced=False).to_dense()
+
+            if keepdims:
+                new_shape = tuple(1 if summed else sshape[i]
+                    for i, summed in enumerate(sdim_is_summed)) + dshape
+                output = output.view(new_shape)
+
+        return output
+    
+    @staticmethod
+    def backward(ctx, grad_output):
+        grad_input = None
+
+        if ctx.needs_input_grad[1]:
+
+            if ctx.dims is None:
+                grad_input = grad_output.squeeze().expand(*(ctx.Av_size))
+            
+            else:
+                sparse_indices, = ctx.saved_tensors
+                grad_input = grad_output.view(ctx.squeezed_shape
+                    )[[idxs for idxs in sparse_indices]]
+
+        return None, grad_input, None, None, None
+
+
 # define function aliases, useful since Function.apply()
 # does not support named arguments
 def masked_mm(A, B, mask_idxs):
@@ -176,7 +251,7 @@ class MaskedTensor:
         return self.s[d]
 
     def t(self):
-        assert self.dim() == 2
+        assert self.i.size(0) == 2
         return mask(self.i[[1, 0], :], self.v, self.s[::-1])
 
     def values(self):
@@ -193,28 +268,9 @@ class MaskedTensor:
         """Looses differentiation."""
         return self.to_sparse().to_dense()
 
-    def sum(self, dim=None, keepdim=False):
-        if dim is None:
-            return self.v.sum()
-
-        assert dim >= 0 and dim < self.dim(), \
-                "sum(): invalid dimension {}.".format(dim)
-
-        assert self.dim() <= 2, \
-                "sum(): tensors with more than 2 dimensions are currently" + \
-                "not supported."
-
-        _torch = torch.cuda if self.v.is_cuda else torch
-        ones = _torch.FloatTensor(self.s[dim], 1).fill_(1)
-        if dim == 0:
-            output = self.t().mm(ones).t()
-        else:
-            output = self.mm(ones)
-
-        if not keepdim:
-            output = output.squeeze(dim)
-
-        return output
+    def sum(self, dims=None, keepdims=False):
+        """Returns a dense tensor."""
+        return Sum.apply(self.i, self.v, self.s, dims, keepdims)
 
     def mm(self, B):
         """
