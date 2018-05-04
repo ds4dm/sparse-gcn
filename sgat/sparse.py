@@ -102,7 +102,6 @@ class Sum(Function):
             # safety check on dims
             dims = np.asarray(dims)
             
-            assert len(dims) > 0
             assert np.all(dims >= 0)
             assert np.all(dims < n_sdims)
             assert len(np.unique(dims)) == len(dims)
@@ -265,8 +264,7 @@ class MaskedTensor:
         return ivs_to_sparse(self.i, self.v, self.s, check_coalesced=False)
 
     def to_dense(self):
-        """Looses differentiation."""
-        return self.to_sparse().to_dense()
+        return self.sum(dims=())
 
     def sum(self, dims=None, keepdims=False):
         """Returns a dense tensor."""
