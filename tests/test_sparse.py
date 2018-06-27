@@ -30,13 +30,17 @@ class TestSparse(unittest.TestCase):
         self.i3 = torch.LongTensor([[1, 4, 5], [0, 1, 0], [1, 7, 1]])
         self.s3 = (10, 10, 10)
         self.w = Variable(torch.rand(3), requires_grad=True)
-        
-        self.sum_Ai = torch.LongTensor([[0, 0, 1, 1, 2], [1, 3, 0, 0, 2], [5, 2, 3, 0, 2]])
+
+        self.sum_Ai = torch.LongTensor([
+            [0, 0, 1, 1, 2, 2],
+            [1, 3, 0, 0, 2, 2],
+            [5, 2, 3, 0, 2, 0]])
         self.sum_Av = Variable(torch.FloatTensor([
             [-4.5,  8.0,  2.8],
             [ 7.0, -0.5,  4.0],
             [ 2.7,  3.1, -8.1],
             [-1.0, -1.2,  5.4],
+            [ 0.3, -2.0,  2.5],
             [ 0.4, -2.2,  1.5]]), requires_grad=True)
         self.sum_As = (4, 5, 6, 3)
 
@@ -133,6 +137,36 @@ class TestSparse(unittest.TestCase):
             self.assertEpsilonEqual(
                 grad_Av, grad_Ad[[idxs for idxs in Ai]], 1e-4)
 
+    def test_masked_softmax(self):
+        Ai = self.sum_Ai
+        Av = self.sum_Av
+        As = self.sum_As
+
+        for dim in (0, 1, 2, 3):
+            A = sp.mask(Ai, Av, As)
+            Ad = Variable(A.to_sparse().to_dense(), requires_grad=True)
+
+            # forward
+            A_softmax = A.masked_softmax(dim)
+            Ad_softmax = torch.where(Ad != 0, Ad, torch.full_like(Ad, -9e15))
+            Ad_softmax = torch.nn.functional.softmax(Ad_softmax, dim=dim)
+
+            # print(A_softmax.values())
+            # print(Ad_softmax[[idxs for idxs in Ai]])
+
+            # check forward
+            self.assertEpsilonEqual(A_softmax.to_dense(), Ad_softmax, 1e-6)
+
+            # backward
+            grad_Av, = grad(A_softmax.values().log().sum(), Av, retain_graph=True)
+            grad_Ad, = grad(Ad_softmax[[idxs for idxs in Ai]].log().sum(), Ad, retain_graph=True)
+
+            # print(grad_Av)
+            # print(grad_Ad[[idxs for idxs in Ai]])
+
+            # check backward
+            self.assertEpsilonEqual(
+                grad_Av, grad_Ad[[idxs for idxs in Ai]], 1e-6)
 
 @unittest.skipUnless(torch.cuda.is_available(), "Cuda unavailable.")
 class TestSparseCuda(TestSparse):

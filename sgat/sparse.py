@@ -266,6 +266,30 @@ class MaskedTensor:
     def to_dense(self):
         return self.sum(dims=())
 
+    def masked_softmax(self, dim):
+        n_sdims = self.i.size(0)  # number of sparse dims
+        n_ddims = self.v.dim() - 1  # number of dense dims
+        s_sdims = self.s[:n_sdims]  # sparse shape
+        s_ddims = self.s[n_sdims:]  # dense shape
+
+        # softmax over sparse dimension
+        if dim < n_sdims:
+            v = self.v
+
+            # exponentiate
+            v = v - v.max().detach()  # (global) overflow trick. Can it be made local ?
+            v = v.exp()
+
+            # normalize over softmax dimension
+            v_norm = Sum.apply(self.i, v, self.s, (dim, ), False)
+            v = v / v_norm[[idxs for d, idxs in enumerate(self.i) if d != dim]]
+
+        # softmax over dense dimension
+        else:
+            v = torch.nn.functional.softmax(self.v, dim=1+dim-n_sdims)
+
+        return mask(self.i, v, self.s)
+
     def sum(self, dims=None, keepdims=False):
         """Returns a dense tensor."""
         return Sum.apply(self.i, self.v, self.s, dims, keepdims)
