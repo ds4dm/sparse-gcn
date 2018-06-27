@@ -115,22 +115,23 @@ class TestSparse(unittest.TestCase):
                     grad_Av, grad_Ad[[idxs for idxs in Ai]], 1e-4)
 
     def test_to_dense(self):
-        Ai = self.sum_Ai
-        Av = self.sum_Av
-        As = self.sum_As
+        for Ai, Av, As in zip(
+                (self.sum_Ai, self.i),
+                (self.sum_Av, self.v),
+                (self.sum_As, self.s)):
 
-        A = sp.mask(Ai, Av, As)
-        Ad = Variable(A.to_sparse().to_dense(), requires_grad=True)
-        
-        # check forward
-        self.assertEpsilonEqual(A.to_dense(), Ad, 1e-4)
+            A = sp.mask(Ai, Av, As)
+            Ad = Variable(A.to_sparse().to_dense(), requires_grad=True)
+            
+            # check forward
+            self.assertEpsilonEqual(A.to_dense(), Ad, 1e-4)
 
-        # check backward
-        grad_Av, = grad(A.to_dense().sum(), Av, retain_graph=True)
-        grad_Ad, = grad(Ad.sum(), Ad, retain_graph=True)
+            # check backward
+            grad_Av, = grad(A.to_dense().sum(), Av, retain_graph=True)
+            grad_Ad, = grad(Ad.sum(), Ad, retain_graph=True)
 
-        self.assertEpsilonEqual(
-            grad_Av, grad_Ad[[idxs for idxs in Ai]], 1e-4)
+            self.assertEpsilonEqual(
+                grad_Av, grad_Ad[[idxs for idxs in Ai]], 1e-4)
 
 
 @unittest.skipUnless(torch.cuda.is_available(), "Cuda unavailable.")
