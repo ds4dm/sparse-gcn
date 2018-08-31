@@ -38,7 +38,7 @@ class TestSparse(unittest.TestCase):
 
         sp.build(i, v, s)
 
-        inv_idx = torch.range(i.size(1)-1, 0, -1).long()
+        inv_idx = torch.arange(i.size(1)-1, -1, -1).long()
         i = i[:, inv_idx]
 
         try:
