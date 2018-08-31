@@ -44,7 +44,7 @@ class TestSparse(unittest.TestCase):
         try:
             sp.build(i, v, s)
             self.assertTrue(False)
-        except:
+        except Exception:
             pass
 
         sp.build(i, v, s, skip_check=True)
