@@ -24,12 +24,12 @@ class Attention(nn.Module):
 
         Parameters
         ----------
-            affinity : Affinity
-                Object of type Affinity to compute the affinity between keys
-                and attentions queries.
-            norm : Norm
-                Object of type Normalization to apply a correction to the
-                attention  weights.
+        affinity : Affinity
+            Object of type Affinity to compute the affinity between keys
+            and attentions queries.
+        norm : Norm
+            Object of type Normalization to apply a correction to the
+            attention  weights.
 
         """
         super().__init__()
@@ -49,23 +49,23 @@ class Attention(nn.Module):
 
         Parameters
         ----------
-            K : FloatTensor
-                Attention keys. First dimension is key index, other are feature
-                values.
-            V : FloatTensor
-                Attention values. First dimension is the value index. There
-                should be as many attention values as their are keys.
-            Q : FloatTensor
-                Queries to make on attention keys.
-            m : FloatTensor
-                A matrix of dimension number of queries per number of keys.
-                Passed to the affinity function. Can be used to make a mask
-                or to pass additional queries data (e.g. edge information for
-                a graph).
+        K : FloatTensor
+            Attention keys. First dimension is key index, other are feature
+            values.
+        V : FloatTensor
+            Attention values. First dimension is the value index. There
+            should be as many attention values as their are keys.
+        Q : FloatTensor
+            Queries to make on attention keys.
+        m : FloatTensor
+            A matrix of dimension number of queries per number of keys.
+            Passed to the affinity function. Can be used to make a mask
+            or to pass additional queries data (e.g. edge information for
+            a graph).
 
         Returns
         -------
-            FloatTensor
+        FloatTensor
             First dimension is align with queries indexes. Other dimensions are
             similar to the value ones.
 
