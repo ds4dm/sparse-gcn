@@ -59,49 +59,6 @@ class TestSparse(unittest.TestCase):
         g, = grad(v_hat.sum(), self.v)
         self.assertTrue(torch.equal(g, torch.ones_like(g)))
 
-    def test_sum(self):
-        X = sp.build(self.i3, self.v * self.w, self.s3)
-
-        # dims=None
-        o = sp.sum(X)
-        od = X.to_dense().sum()
-        self.assertTrue(np.all(o.to_dense() == od))
-
-        g, = grad(sp.values(o).sum(), self.w, retain_graph=True)
-        self.assertTrue(np.all(g.data == self.v.data))
-
-        # dims=(0,)
-        o = sp.sum(X, (0,))
-        od = X.to_dense().sum(0, keepdim=True)
-        self.assertTrue(np.all(o.to_dense().data == od.data))
-
-        g, = grad(sp.values(o).sum(), self.w, retain_graph=True)
-        self.assertTrue(np.all(g.data == self.v.data))
-
-        # dims=(1,)
-        o = sp.sum(X, (1,))
-        od = X.to_dense().sum(1, keepdim=True)
-        self.assertTrue(np.all(o.to_dense().data == od.data))
-
-        g, = grad(sp.values(o).sum(), self.w, retain_graph=True)
-        self.assertTrue(np.all(g.data == self.v.data))
-
-        # dims=(2,)
-        o = sp.sum(X, (2,))
-        od = X.to_dense().sum(2, keepdim=True)
-        self.assertTrue(np.all(o.to_dense().data == od.data))
-
-        g, = grad(sp.values(o).sum(), self.w, retain_graph=True)
-        self.assertTrue(np.all(g.data == self.v.data))
-
-        # dims=(0, 2)
-        o = sp.sum(X, (0, 2))
-        od = X.to_dense().sum(0, keepdim=True).sum(2, keepdim=True)
-        self.assertTrue(np.all(o.to_dense().data == od.data))
-
-        g, = grad(sp.values(o).sum(), self.w)
-        self.assertTrue(np.all(g.data == self.v.data))
-
     def test_matmulmasked(self):
         Ms = sp.matmulmasked(self.A, self.B, self.m)
 
