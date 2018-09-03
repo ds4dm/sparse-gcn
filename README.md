@@ -1,5 +1,4 @@
-# sGat
-Sparse graph attention in PyTorch.
+# Sparse graph convolution network
 
 Attention model is based on:
 

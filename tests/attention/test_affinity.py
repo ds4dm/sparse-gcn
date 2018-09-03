@@ -5,7 +5,7 @@
 import unittest
 import torch
 from torch.autograd import Variable
-import sgat.attention.affinity as aff
+import sgcn.attention.affinity as aff
 
 
 class TestAffinity(unittest.TestCase):

@@ -8,7 +8,7 @@ Install the modules.
 from setuptools import setup, find_packages
 
 setup(
-    name="sGat",
+    name="sgcn",
     version="0.1",
     packages=find_packages(),
     author="CERC DS4DM"
