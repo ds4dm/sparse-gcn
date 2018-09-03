@@ -14,8 +14,6 @@ by the mask.
 import torch
 from torch.autograd import Function
 
-import numpy as np
-
 
 class Build(Function):
     """See build() function."""
@@ -192,7 +190,7 @@ class MatMul(Function):
 # define function aliases, useful since Function.apply()
 # does not support named arguments
 def build(i, v, *args, skip_check=False):
-    """Builds a sparse Tensor.
+    """Build a sparse Tensor.
 
     Constructs a pytorch sparse tensor (on the same device as
     the input). The derivatives are computed w.r.t the values
@@ -223,7 +221,7 @@ def build(i, v, *args, skip_check=False):
 
 
 def values(t):
-    """Extracts the values stored in a sparse tensor.
+    """Extract the values stored in a sparse tensor.
 
     The values are the values actually kept in memory.
     This is equivalent to calling `t._values()` with
@@ -238,36 +236,13 @@ def values(t):
     -------
     FloatTensor
         One-dimensional FloatTensor
+
     """
     return Values.apply(t)
 
 
-def sum(t, dims=None):
-    """
-    Sums a sparse tensor over some specific or all dimensions.
-
-    Parameters
-    ----------
-    t : sparse.FloatTensor
-        The sparse tensor, must be coalesced.
-    dims: tuple of ints
-        The dimensions over which to sum, or `None` to
-        sum over all dimensions.
-
-    Returns
-    -------
-    sparse.FloatTensor
-        The sparse tensor summed over dimensions in `dims`.
-        Note that the original dimensions are kept but
-        shrinked to size 1.
-
-    """
-    return Sum.apply(t, dims)
-
-
 def matmul(A, B):
-    """
-    Matrix multiplication with a sparse tensor.
+    """Matrix multiplication with a sparse tensor.
 
     This is equivalent to calling `A @ B` where `A` is
     sparse and `B` is dense, with differentiation support

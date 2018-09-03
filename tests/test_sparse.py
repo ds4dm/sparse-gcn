@@ -4,7 +4,6 @@
 
 import unittest
 import torch
-import numpy as np
 from torch.autograd import Variable, grad
 import sgcn.sparse as sp
 
