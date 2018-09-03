@@ -3,15 +3,14 @@
 
 import unittest
 import torch
-from torch.autograd import Variable
 import sgcn.nn.affinity as aff
 
 
 class TestAffinity(unittest.TestCase):
 
     def setUp(self):
-        self.K = Variable(torch.rand((7, 3)), requires_grad=True)
-        self.Q = Variable(torch.rand((4, 3)), requires_grad=True)
+        self.K = torch.rand((7, 3)).requires_grad_()
+        self.Q = torch.rand((4, 3)).requires_grad_()
         self.md = (torch.rand((4, 7)) > .6).float()
         idx = self.md.nonzero()
         self.ms = torch.sparse.FloatTensor(
