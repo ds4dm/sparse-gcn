@@ -1,4 +1,4 @@
-# conding: utf-8
+# coding: utf-8
 
 """Attention module.
 
@@ -6,10 +6,12 @@ Attention as defined in Attention is All you Need.
 https://arxiv.org/abs/1706.03762
 """
 
+import torch
 import torch.nn as nn
+
 from .. import sparse as sp
-from .affinity import Affinity
-from .normalization import Normalization
+from . import affinity as aff
+from . import normalization as norm
 
 
 class Attention(nn.Module):
@@ -19,22 +21,26 @@ class Attention(nn.Module):
     sizes can already be done using a block diagonal mask.
     """
 
-    def __init__(self, affinity: Affinity, norm: Normalization):
+    def __init__(
+        self,
+        affinity: aff.Affinity,
+        normalization: norm.Normalization
+    ) -> None:
         """Initialize the Attention.
 
         Parameters
         ----------
-        affinity : Affinity
+        affinity
             Object of type Affinity to compute the affinity between keys
             and attentions queries.
-        norm : Norm
+        normalization
             Object of type Normalization to apply a correction to the
             attention  weights.
 
         """
         super().__init__()
         self.affinity = affinity
-        self.norm = norm
+        self.normalization = normalization
 
     def forward(self, K, V, Q, m=None):
         """Compute attention.
@@ -71,8 +77,102 @@ class Attention(nn.Module):
 
         """
         QKt = self.affinity(Q, K, m)
-        QKt_n = self.norm(QKt)
+        QKt_n = self.normalization(QKt)
         if QKt_n.is_sparse:
             return sp.matmul(QKt_n, V)
         else:
             return QKt_n @ V
+
+
+class MultiHeadAttention(Attention):
+    """Dot product attention with multiple heads.
+
+    Linearly project the keys, values, and queries and applies dot product
+    attention to the result. This process is repeated as many times as there
+    are heads, and the results are concatenated together.
+    """
+
+    def __init__(
+        self,
+        in_key: int,
+        in_value: int,
+        in_query: int,
+        n_head: int,
+        head_qk: int,
+        head_v: int
+    ) -> None:
+        """Initialize multi head attention.
+
+        Parameters
+        ----------
+        in_key
+            Dimension of input keys.
+        in_value
+            Dimension of input values.
+        in_query
+            Dimension of input queries.
+        n_head
+            Number of heads to use.
+        head_qk
+            Dimension every projected head for queries and keys. They share the
+            Same dimension as the affinity is computed through dot product.
+        head_v
+            Dimension every projected head for values.
+
+        """
+        super().__init__(
+            affinity=aff.DotProduct(), normalization=norm.NoNorm()
+        )
+        self.lin_k = nn.Linear(in_key, head_qk * n_head)
+        self.lin_v = nn.Linear(in_value, head_v * n_head)
+        self.lin_q = nn.Linear(in_query, head_qk * n_head)
+        self._n_head = n_head
+
+    def _view_heads(self, X):
+        """Reshape output of Linear by number of heads."""
+        if X.dim() == 2:
+            out_dim = X.size(1)
+            return X.view(-1, self._n_head, out_dim // self._n_head)
+        else:
+            raise RuntimeError(
+                f"Only dimension 2 supported, recieved: {X.dim()}"
+            )
+
+    def forward(self, K, V, Q, m=None):
+        """Compute attention.
+
+        Parameters
+        ----------
+        K : FloatTensor
+            Attention keys. First dimension is key index, other are feature
+            values.
+        V : FloatTensor
+            Attention values. First dimension is the value index. There
+            should be as many attention values as their are keys.
+        Q : FloatTensor
+            Queries to make on attention keys.
+        m : FloatTensor
+            A matrix of dimension number of queries per number of keys.
+            Passed to the affinity function. Can be used to make a mask
+            or to pass additional queries data (e.g. edge information for
+            a graph).
+
+        Returns
+        -------
+        FloatTensor
+            First dimension is align with queries indexes. Second dimension is
+            the number of heads times the output dimension of one value head
+            (`head_v`).
+
+        """
+        K_proj = self._view_heads(self.lin_k(K))
+        V_proj = self._view_heads(self.lin_v(V))
+        Q_proj = self._view_heads(self.lin_q(Q))
+
+        V_out = []
+        for k in range(self._n_head):
+            V_out.append(super().forward(
+                K=K_proj[:, k], V=V_proj[:, k], Q=Q_proj[:, k], m=m
+            ))
+
+        return torch.cat(V_out, dim=1)
