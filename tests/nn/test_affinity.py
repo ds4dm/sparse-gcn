@@ -1,11 +1,10 @@
 # coding: utf-8
 
-"""Test for affinity module."""
 
 import unittest
 import torch
 from torch.autograd import Variable
-import sgcn.attention.affinity as aff
+import sgcn.nn.affinity as aff
 
 
 class TestAffinity(unittest.TestCase):

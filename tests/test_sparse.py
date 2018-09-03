@@ -1,6 +1,5 @@
 # coding: utf-8
 
-"""Test for sparse module."""
 
 import unittest
 import torch
