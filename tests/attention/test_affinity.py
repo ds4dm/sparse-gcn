@@ -19,19 +19,20 @@ class TestAffinity(unittest.TestCase):
             idx.t(), torch.ones(len(idx)), self.md.size())
 
     def test_dotproduct_dense(self):
-        func  = aff.DotProduct(scaled=False)
+        func = aff.DotProduct(scaled=False)
         coefs = func(self.Q, self.K)
         self.assertFalse(coefs.is_sparse)
         self.assertTrue(torch.equal(coefs, self.Q @ self.K.t()))
 
     def test_dotproduct_sparse(self):
-        func  = aff.DotProduct(scaled=False)
+        func = aff.DotProduct(scaled=False)
         coefs = func(self.Q, self.K, self.ms)
         self.assertTrue(coefs.is_sparse)
 
         # check if mask is respected
         checks = (coefs.to_dense() * (1 - self.md)) > 0
         self.assertFalse(checks.any())
+
 
 @unittest.skipUnless(torch.cuda.is_available(), "Cuda unavailable.")
 class TestAffinityCuda(TestAffinity):

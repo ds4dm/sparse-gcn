@@ -55,9 +55,10 @@ class DotProduct(Affinity):
         Returns
         -------
             FloatTensor or sparse.FloatTensor
-                The matrice of attention weights first dimension is query index,
-                second dimension is key index. If a sparse mask is given, the
-                resulting matrice is also sparse (with the same support).
+                The matrice of attention weights first dimension is query
+                index, second dimension is key index. If a sparse mask is
+                given, the resulting matrice is also sparse (with the same
+                support).
 
         """
         if (m is None) or (not m.is_sparse):
