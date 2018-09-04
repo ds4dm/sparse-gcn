@@ -1,10 +1,9 @@
 # coding: utf-8
 
-"""Test for sparse module."""
 
 import unittest
 import torch
-from torch.autograd import Variable, grad
+from torch.autograd import grad
 import sgcn.sparse as sp
 
 
@@ -17,10 +16,10 @@ class TestSparse(unittest.TestCase):
 
     def setUp(self):
         self.i = torch.LongTensor([[0, 1, 2], [1, 4, 6]])
-        self.v = Variable(torch.rand(3), requires_grad=True)
+        self.v = torch.rand(3).requires_grad_()
         self.s = (3, 7)
-        self.A = Variable(torch.rand((3, 7)), requires_grad=True)
-        self.B = Variable(torch.rand((7, 5)), requires_grad=True)
+        self.A = torch.rand((3, 7)).requires_grad_()
+        self.B = torch.rand((7, 5)).requires_grad_()
         m = torch.rand((3, 5)) > .5
         m_i = m.nonzero()
         self.m = torch.sparse.FloatTensor(
@@ -28,7 +27,7 @@ class TestSparse(unittest.TestCase):
         )
         self.i3 = torch.LongTensor([[1, 4, 5], [0, 1, 0], [1, 7, 1]])
         self.s3 = (10, 10, 10)
-        self.w = Variable(torch.rand(3), requires_grad=True)
+        self.w = torch.rand(3).requires_grad_()
 
     def test_build(self):
         i = self.i
@@ -82,7 +81,7 @@ class TestSparse(unittest.TestCase):
         # Check forward
         A = sp.build(self.i, self.v, self.s)
         Ms = sp.matmul(A, self.B)
-        Ad = Variable(A.to_dense(), requires_grad=True)
+        Ad = A.to_dense().requires_grad_()
         Md = Ad @ self.B
         self.assertEpsilonEqual(Ms, Md, 1e-4)
 

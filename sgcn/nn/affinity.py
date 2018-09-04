@@ -30,9 +30,9 @@ class DotProduct(Affinity):
 
         Parameters
         ----------
-            scaled : bool
-                Wether or nor to scale the attention weights by the inverse
-                of the square root of the key dimension.
+        scaled : bool
+            Wether or nor to scale the attention weights by the inverse
+            of the square root of the key dimension.
 
         """
         super().__init__()
@@ -43,21 +43,22 @@ class DotProduct(Affinity):
 
         Parameters
         ----------
-            Q : FloatTensor
-                Queries tensor with dimension (n_queries, feat_dim).
-            K : FloatTensor
-                Keys tensor with dimensions (n_keys, feat_dim).
-            m : FloatTensor or sparse.Tensor
-                Optional mask. If the mask is given in dense form it is applied
-                by elementwise multiplication. If given in sparse form, only
-                the non zero values will be computed.
+        Q : FloatTensor
+            Queries tensor with dimension (n_queries, feat_dim).
+        K : FloatTensor
+            Keys tensor with dimensions (n_keys, feat_dim).
+        m : FloatTensor or sparse.Tensor
+            Optional mask. If the mask is given in dense form it is applied
+            by elementwise multiplication. If given in sparse form, only
+            the non zero values will be computed.
 
         Returns
         -------
-            FloatTensor or sparse.FloatTensor
-                The matrice of attention weights first dimension is query index,
-                second dimension is key index. If a sparse mask is given, the
-                resulting matrice is also sparse (with the same support).
+        FloatTensor or sparse.FloatTensor
+            The matrice of attention weights first dimension is query
+            index, second dimension is key index. If a sparse mask is
+            given, the resulting matrice is also sparse (with the same
+            support).
 
         """
         if (m is None) or (not m.is_sparse):
