@@ -2,10 +2,16 @@
 
 """Setup file.
 
-Install the modules.
+Installs the modules.
 """
 
+import os
 from setuptools import setup, find_packages
+
+
+__currdir__ = os.getcwd()
+__readme__ = os.path.join(__currdir__, "README.md")
+
 
 setup(
     name="sgcn",
@@ -14,6 +20,6 @@ setup(
     author="CERC DS4DM",
     license="MIT",
     description="Sparse graph neural networks in PyTorch",
-    long_description=open("README.md").readlines(),
+    long_description=open(__readme__).read(),
     install_requires=["torch"]
 )
