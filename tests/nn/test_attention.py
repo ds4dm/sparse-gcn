@@ -18,7 +18,7 @@ class TestAttention(unittest.TestCase):
         self.V = torch.rand((7, 4)).requires_grad_()
         self.md = (torch.rand((4, 7)) > .6).float()
         idx = self.md.nonzero()
-        self.ms = torch.sparse.FloatTensor(
+        self.ms = torch.sparse_coo_tensor(
             idx.t(), torch.ones(len(idx)), self.md.size())
 
     def test_attention(self):

@@ -22,7 +22,7 @@ class TestSparse(unittest.TestCase):
         self.B = torch.rand((7, 5)).requires_grad_()
         m = torch.rand((3, 5)) > .5
         m_i = m.nonzero()
-        self.m = torch.sparse.FloatTensor(
+        self.m = torch.sparse_coo_tensor(
             m_i.t(), torch.ones(len(m_i)), m.size()
         )
         self.i3 = torch.LongTensor([[1, 4, 5], [0, 1, 0], [1, 7, 1]])

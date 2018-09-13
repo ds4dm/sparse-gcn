@@ -25,11 +25,11 @@ class Build(Function):
         Parameters
         ----------
         i : LongTensor
-            Indices tensor as given to `sparse.FloatTensor`.
-        v : FloatTensor
-            Values tensor as given to `sparse.FloatTensor`.
+            Indices tensor as given to `torch.sparse_coo_tensor`.
+        v : Tensor
+            Values tensor as given to `torch.sparse_coo_tensor`.
         *args
-            Additional options given to `sparse.FloatTensor`.
+            Additional options given to `torch.sparse_coo_tensor`.
         skip_check: boolean
             Decides wether to skip the check for coalesced indices
             on the input. May be useful to save computations in the
@@ -37,14 +37,13 @@ class Build(Function):
 
         Returns
         -------
-        sparse.FloatTensor
+        Tensor
             A new sparse tensor.
 
         """
         ctx.n_options = len(args)
 
-        _torch = torch.cuda if v.is_cuda else torch
-        output = _torch.sparse.FloatTensor(i, v, *args).coalesce()
+        output = torch.sparse_coo_tensor(i, v, *args).coalesce()
 
         if not skip_check and (
                 not i.shape == output._indices().shape or
