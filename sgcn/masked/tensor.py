@@ -206,7 +206,15 @@ class MaskedTensor:
         if dim is None:
             return self.values.sum()
         elif dim < self.sparse_dims:
+            # Cannot remove dim and use coalesce because it may permutes
+            # the values
             raise NotImplementedError("Summation over sparse dimension.")
         else:
             return self.with_values(
                 self.values.sum(dim - self.sparse_dims + 1, keepdim=keepdim))
+
+    def mm(self, other: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError()
+
+    def mv(self, other: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError()

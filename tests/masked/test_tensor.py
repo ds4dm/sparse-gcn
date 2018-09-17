@@ -4,15 +4,7 @@ import pytest
 import torch
 from mock import MagicMock
 
-from sgcn.masked import MaskedTensor
-
-
-@pytest.fixture(params=["cpu", "cuda"])
-def device(request):
-    _device = torch.device(request.param)
-    if _device.type == "cuda" and not torch.cuda.is_available():
-        pytest.skip()
-    return _device
+from sgcn.masked.tensor import MaskedTensor
 
 
 @pytest.fixture
@@ -83,7 +75,7 @@ def test_dims(maskedtensor):
 
 
 def test_with_values(maskedtensor):
-    v = torch.rand(4, 13)
+    v = torch.rand(4, 13).to(maskedtensor.device)
     m = maskedtensor.with_values(v)
 
     assert isinstance(m, MaskedTensor)
@@ -95,7 +87,7 @@ def test_with_values(maskedtensor):
 
 
 def test_apply(maskedtensor):
-    v = torch.rand(4, 13)
+    v = torch.rand(4, 13).to(maskedtensor.device)
     func = MagicMock()
     func.return_value = v
     m = maskedtensor.apply(func)
