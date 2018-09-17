@@ -6,10 +6,12 @@ Attention as defined in Attention is All you Need.
 https://arxiv.org/abs/1706.03762
 """
 
+from typing import Union, Optional
+
 import torch
 import torch.nn as nn
 
-from .. import sparse as sp
+from sgcn.masked.tensor import MaskedTensor
 from . import affinity as aff
 from . import normalization as norm
 
@@ -42,7 +44,13 @@ class Attention(nn.Module):
         self.affinity = affinity
         self.normalization = normalization
 
-    def forward(self, K, V, Q, m=None):
+    def forward(
+        self,
+        K: torch.Tensor,
+        V: torch.Tensor,
+        Q: torch.Tensor,
+        m: Optional[Union[torch.Tensor, MaskedTensor]] = None
+    ) -> torch.Tensor:
         """Compute attention.
 
         Accoring to _Attention is All you Need_:
@@ -55,15 +63,15 @@ class Attention(nn.Module):
 
         Parameters
         ----------
-        K : FloatTensor
+        K:
             Attention keys. First dimension is key index, other are feature
             values.
-        V : FloatTensor
+        V:
             Attention values. First dimension is the value index. There
             should be as many attention values as their are keys.
-        Q : FloatTensor
+        Q:
             Queries to make on attention keys.
-        m : FloatTensor
+        m:
             A matrix of dimension number of queries per number of keys.
             Passed to the affinity function. Can be used to make a mask
             or to pass additional queries data (e.g. edge information for
@@ -71,15 +79,15 @@ class Attention(nn.Module):
 
         Returns
         -------
-        FloatTensor
+        attention:
             First dimension is align with queries indexes. Other dimensions are
             similar to the value ones.
 
         """
         QKt = self.affinity(Q, K, m)
         QKt_n = self.normalization(QKt)
-        if QKt_n.is_sparse:
-            return sp.matmul(QKt_n, V)
+        if isinstance(QKt_n, MaskedTensor):
+            return QKt_n.mm(V)
         else:
             return QKt_n @ V
 
@@ -105,18 +113,18 @@ class MultiHeadAttention(Attention):
 
         Parameters
         ----------
-        in_key
+        in_key:
             Dimension of input keys.
-        in_value
+        in_value:
             Dimension of input values.
-        in_query
+        in_query:
             Dimension of input queries.
-        n_head
+        n_head:
             Number of heads to use.
-        head_qk
+        head_qk:
             Dimension every projected head for queries and keys. They share the
             Same dimension as the affinity is computed through dot product.
-        head_v
+        head_v:
             Dimension every projected head for values.
 
         """
@@ -128,7 +136,7 @@ class MultiHeadAttention(Attention):
         self.lin_q = nn.Linear(in_query, head_qk * n_head)
         self._n_head = n_head
 
-    def _view_heads(self, X):
+    def _view_heads(self, X: torch.Tensor) -> torch.Tensor:
         """Reshape output of Linear by number of heads."""
         if X.dim() == 2:
             out_dim = X.size(1)
@@ -138,20 +146,26 @@ class MultiHeadAttention(Attention):
                 f"Only dimension 2 supported, recieved: {X.dim()}"
             )
 
-    def forward(self, K, V, Q, m=None):
+    def forward(
+        self,
+        K: torch.Tensor,
+        V: torch.Tensor,
+        Q: torch.Tensor,
+        m: Optional[Union[torch.Tensor, MaskedTensor]] = None
+    ) -> torch.Tensor:
         """Compute attention.
 
         Parameters
         ----------
-        K : FloatTensor
+        K:
             Attention keys. First dimension is key index, other are feature
             values.
-        V : FloatTensor
+        V:
             Attention values. First dimension is the value index. There
             should be as many attention values as their are keys.
-        Q : FloatTensor
+        Q:
             Queries to make on attention keys.
-        m : FloatTensor
+        m:
             A matrix of dimension number of queries per number of keys.
             Passed to the affinity function. Can be used to make a mask
             or to pass additional queries data (e.g. edge information for
@@ -159,7 +173,7 @@ class MultiHeadAttention(Attention):
 
         Returns
         -------
-        FloatTensor
+        attention:
             First dimension is align with queries indexes. Second dimension is
             the number of heads times the output dimension of one value head
             (`head_v`).

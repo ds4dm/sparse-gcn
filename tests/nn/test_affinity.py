@@ -1,37 +1,53 @@
 # coding: utf-8
 
-
-import unittest
+import numpy as np
+import pytest
 import torch
+
+from sgcn.masked.tensor import MaskedTensor
 import sgcn.nn.affinity as aff
 
 
-class TestAffinity(unittest.TestCase):
-
-    def setUp(self):
-        self.K = torch.rand((7, 3)).requires_grad_()
-        self.Q = torch.rand((4, 3)).requires_grad_()
-        self.md = (torch.rand((4, 7)) > .6).float()
-        idx = self.md.nonzero()
-        self.ms = torch.sparse_coo_tensor(
-            idx.t(), torch.ones(len(idx)), self.md.size())
-
-    def test_dotproduct_dense(self):
-        func = aff.DotProduct(scaled=False)
-        coefs = func(self.Q, self.K)
-        self.assertFalse(coefs.is_sparse)
-        self.assertTrue(torch.equal(coefs, self.Q @ self.K.t()))
-
-    def test_dotproduct_sparse(self):
-        func = aff.DotProduct(scaled=False)
-        coefs = func(self.Q, self.K, self.ms)
-        self.assertTrue(coefs.is_sparse)
-
-        # check if mask is respected
-        checks = (coefs.to_dense() * (1 - self.md)) > 0
-        self.assertFalse(checks.any())
+def _allclose(A, B):
+    return np.allclose(A.detach().cpu(), B.detach().cpu())
 
 
-@unittest.skipUnless(torch.cuda.is_available(), "Cuda unavailable.")
-class TestAffinityCuda(TestAffinity):
-    pass
+@pytest.fixture(params=["dense", "masked"])
+def data(device, request):
+    K = torch.rand(7, 3, device=device, requires_grad=True)
+    V = torch.rand(7, 4, device=device, requires_grad=True)
+    Q = torch.rand(4, 3, device=device, requires_grad=True)
+    md = (torch.rand(4, 7, device=device, requires_grad=True) > .6).float()
+
+    if request.param == "dense":
+        return K, V, Q, md
+    else:
+        idx = md.nonzero()
+        mm = MaskedTensor(idx.t(), torch.ones(len(idx), device=device), (4, 7))
+        return K, V, Q, mm
+
+
+def test_dotproduct_no_mask(data):
+    K, _, Q, _ = data
+    func = aff.DotProduct(scaled=False)
+    coefs = func(Q, K)
+    assert torch.is_tensor(coefs)
+    assert _allclose(coefs, Q @ K.t())
+
+
+def test_dotproduct(data):
+    K, _, Q, m = data
+    func = aff.DotProduct(scaled=False)
+    coefs = func(Q, K, m)
+    assert isinstance(coefs, m.__class__)
+
+    # check if mask is respected
+    if isinstance(m, MaskedTensor):
+        dense_mask = m.to_sparse().to_dense()
+        dense_coefs = coefs.to_sparse().to_dense()
+    else:
+        dense_mask = m
+        dense_coefs = coefs
+
+    checks = (dense_coefs * (1 - dense_mask)) > 0
+    assert not checks.any()

@@ -8,6 +8,10 @@ from torch.autograd import gradcheck
 import sgcn.masked.functions as F
 
 
+def _allclose(A, B):
+    return np.allclose(A.detach().cpu(), B.detach().cpu())
+
+
 @pytest.fixture
 def sparse_matrix_data(device):
     idx = torch.tensor(
@@ -22,7 +26,7 @@ def test_matmul_forward(sparse_matrix_data, device):
     AB_tested = F.matmul(*sparse_matrix_data, B)
     AB_expected = A @ B
 
-    assert (AB_tested == AB_expected).all().item()
+    assert _allclose(AB_tested, AB_expected)
 
 
 def test_matmul_grad(sparse_matrix_data, device):
@@ -43,7 +47,7 @@ def test_matmulmasked_forward(sparse_matrix_data, device):
 
     AB_values_tested = F.matmulmasked(A, B, indices)
     AB_alues_expected = (A @ B)[tuple(indices)]
-    assert np.allclose(AB_values_tested.cpu(), AB_alues_expected.cpu())
+    assert _allclose(AB_values_tested, AB_alues_expected)
 
 
 def test_matmulmasked_grad(sparse_matrix_data, device):

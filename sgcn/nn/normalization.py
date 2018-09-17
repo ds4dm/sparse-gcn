@@ -1,9 +1,13 @@
 # coding: utf-8
 
-
 """Normalization classes."""
 
+from typing import Union
+
+import torch
 import torch.nn as nn
+
+from sgcn.masked.tensor import MaskedTensor
 
 
 class Normalization(nn.Module):
@@ -19,6 +23,8 @@ class Normalization(nn.Module):
 class NoNorm(Normalization):
     """No normalization class."""
 
-    def forward(self, QKt):
+    def forward(
+        self, QKt: Union[torch.Tensor, MaskedTensor]
+    ) -> Union[torch.Tensor, MaskedTensor]:
         """Identity function."""
         return QKt

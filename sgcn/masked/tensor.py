@@ -9,6 +9,8 @@ from typing import Optional, Union, Callable
 import attr
 import torch
 
+from . import functions as func
+
 
 @attr.s(auto_attribs=True, frozen=True, cmp=False)
 class MaskedTensor:
@@ -214,7 +216,60 @@ class MaskedTensor:
                 self.values.sum(dim - self.sparse_dims + 1, keepdim=keepdim))
 
     def mm(self, other: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError()
+        """Perform matrix matrix multiplication.
+
+        Supports self as sparse matrix (2 dense dims) and other as dense matrix
+        (2 dims) with matching shapes.
+
+        Parameters
+        ----------
+        other:
+            Dense matrix left multiplied by this tensor.
+
+        Returns
+        -------
+        output:
+            The dense result of the `self` `@` `other`.
+
+        """
+        return func.matmul(self.indices, self.values, self.shape, other)
 
     def mv(self, other: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError()
+        """Perform matrix vector multiplication.
+
+        Supports self as sparse matrix (2 dense dims) and other as dense vector
+        (1 dim) with matching shapes.
+
+        Parameters
+        ----------
+        other:
+            Dense vector left multiplied by this tensor.
+
+        Returns
+        -------
+        output:
+            The dense result of the `self` `@` `other`.
+
+        """
+        return self.mm(other.unsqueeze(-1)).squeeze(-1)
+
+    def mask_mm(self, A: torch.Tensor, B: torch.Tensor) -> "MaskedTensor":
+        """Compute the masked matrix multiplication.
+
+        Computes `A @ B` on;y for the indices provided in the current
+        MaskedTensor.
+
+        Parameters
+        ----------
+        A:
+            Left dense matrix (two dimensions only).
+        B:
+            Right dense matrix (two dimensions only).
+
+        Returns
+        -------
+        ouput:
+            The masked result of `A @ B`.
+
+        """
+        return self.with_values(func.matmulmasked(A, B, self.indices))

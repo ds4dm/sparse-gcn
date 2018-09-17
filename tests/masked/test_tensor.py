@@ -1,10 +1,15 @@
 # coding: utf-8
 
+import numpy as np
 import pytest
 import torch
 from mock import MagicMock
 
 from sgcn.masked.tensor import MaskedTensor
+
+
+def _allclose(A, B):
+    return np.allclose(A.detach().cpu(), B.detach().cpu())
 
 
 @pytest.fixture
@@ -51,7 +56,7 @@ def test_to_sparse(data):
 
     assert torch.is_tensor(m.to_sparse())
     assert m.to_sparse().is_sparse
-    assert (s.to_dense() == m.to_sparse().to_dense()).all().item()
+    assert _allclose(s.to_dense(), m.to_sparse().to_dense())
 
 
 def test_from_sparse(data):
@@ -60,7 +65,7 @@ def test_from_sparse(data):
 
     assert isinstance(m, MaskedTensor)
     # Should suceed is test_to_sparse succeed
-    assert (s.to_dense() == m.to_sparse().to_dense()).all().item()
+    assert _allclose(s.to_dense(), m.to_sparse().to_dense())
 
 
 def test_size(maskedtensor):
@@ -111,3 +116,40 @@ def test_sum(maskedtensor):
     # not implemented yet
     with pytest.raises(NotImplementedError):
         maskedtensor.sum(1)
+
+
+def test_mm(maskedtensor, device):
+    # mm only works for sparse matrices (2 sparse dims)
+    maskedtensor = maskedtensor.with_values(maskedtensor.values[:, 0, 0])
+    other = torch.rand(7, 5, device=device)
+
+    result = maskedtensor.mm(other)
+    expected_result = maskedtensor.to_sparse() @ other
+    assert torch.is_tensor(result)
+    assert not result.is_sparse
+    assert _allclose(result, expected_result)
+
+
+def test_mv(maskedtensor, device):
+    # mv only works for sparse matrices (2 sparse dims)
+    maskedtensor = maskedtensor.with_values(maskedtensor.values[:, 0, 0])
+    other = torch.rand(7, device=device)
+
+    result = maskedtensor.mv(other)
+    expected_result = (maskedtensor.to_sparse().to_dense() @ other)
+    assert torch.is_tensor(result)
+    assert not result.is_sparse
+    assert _allclose(result, expected_result)
+
+
+def test_mask_mm(maskedtensor, device):
+    A = torch.rand(13, 5, device=device)
+    B = torch.rand(5, 7, device=device)
+    dense_mask = maskedtensor.with_values(torch.ones(4, device=device)) \
+                             .to_sparse().to_dense()
+
+    result = maskedtensor.mask_mm(A, B)
+    expected_result = (A @ B) * dense_mask
+    assert isinstance(result, MaskedTensor)
+    assert result.shape == (13, 7)
+    assert _allclose(result.to_sparse().to_dense(),                        expected_result)
