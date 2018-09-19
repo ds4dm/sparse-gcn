@@ -2,9 +2,13 @@
 
 """Affinities classes."""
 
+from typing import Optional, Union
+
+import torch
 import torch.nn as nn
 from math import sqrt
-from .. import sparse as sp
+
+from sgcn.masked.tensor import MaskedTensor
 
 
 class Affinity(nn.Module):
@@ -25,12 +29,12 @@ class DotProduct(Affinity):
     product.
     """
 
-    def __init__(self, scaled: bool=True):
+    def __init__(self, scaled: bool = True) -> None:
         """Initialize affinity.
 
         Parameters
         ----------
-        scaled : bool
+        scaled:
             Wether or nor to scale the attention weights by the inverse
             of the square root of the key dimension.
 
@@ -38,36 +42,43 @@ class DotProduct(Affinity):
         super().__init__()
         self.scaled = scaled
 
-    def forward(self, Q, K, m=None):
+    def forward(
+        self,
+        Q: torch.Tensor,
+        K: torch.Tensor,
+        m: Optional[Union[torch.Tensor, MaskedTensor]] = None
+    ) -> Union[torch.Tensor, MaskedTensor]:
         """Compute dot-product affinity.
 
         Parameters
         ----------
-        Q : FloatTensor
+        Q
             Queries tensor with dimension (n_queries, feat_dim).
-        K : FloatTensor
+        K
             Keys tensor with dimensions (n_keys, feat_dim).
-        m : FloatTensor or sparse.Tensor
+        m
             Optional mask. If the mask is given in dense form it is applied
             by elementwise multiplication. If given in sparse form, only
             the non zero values will be computed.
 
         Returns
         -------
-        FloatTensor or sparse.FloatTensor
+        affinity
             The matrice of attention weights first dimension is query
-            index, second dimension is key index. If a sparse mask is
-            given, the resulting matrice is also sparse (with the same
-            support).
+            index, second dimension is key index. If a mask is given by the
+            type MaskedTensor, the results is also MaskedTensor, otherwise
+            the result is dense.
 
         """
-        if (m is None) or (not m.is_sparse):
+        if isinstance(m, MaskedTensor):
+            QKt = m.mask_mm(Q, K.t())
+            if self.scaled:
+                QKt = QKt.apply(lambda x: x / sqrt(K.size(1)))
+
+        else:
             QKt = Q @ K.t()
             QKt = QKt if m is None else QKt * m
-        else:
-            QKt = sp.matmulmasked(Q, K.t(), m)
-
-        if self.scaled:  # Apply scaling if specified
-            QKt = QKt / sqrt(K.size(1))
+            if self.scaled:
+                QKt = QKt / sqrt(K.size(1))
 
         return QKt
