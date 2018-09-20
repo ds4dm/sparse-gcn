@@ -152,4 +152,32 @@ def test_mask_mm(maskedtensor, device):
     expected_result = (A @ B) * dense_mask
     assert isinstance(result, MaskedTensor)
     assert result.shape == (13, 7)
-    assert _allclose(result.to_sparse().to_dense(),                        expected_result)
+    assert _allclose(result.to_sparse().to_dense(), expected_result)
+
+
+def test_transpose(maskedtensor):
+    # sparse dims
+    t = maskedtensor.transpose(0, 1)
+    assert t.shape == (7, 13, 3, 9)
+    assert (t.indices[0] == maskedtensor.indices[1]).all().item()
+    assert (t.indices[1] == maskedtensor.indices[0]).all().item()
+
+    # dense dims
+    t = maskedtensor.transpose(2, 3)
+    assert t.shape == (13, 7, 9, 3)
+    assert (t.values == maskedtensor.values.transpose(1, 2)).all().item()
+
+    # raises
+    with pytest.raises(RuntimeError):
+        maskedtensor.transpose(0, 2)
+
+
+def test_t(maskedtensor):
+    with pytest.raises(RuntimeError):
+        maskedtensor.t()
+
+    # Make 2 dimensional
+    maskedtensor = maskedtensor.with_values(maskedtensor.values[:, 0, 0])
+    assert maskedtensor.t().shape == (7, 13)
+    assert (maskedtensor.t().indices
+            == maskedtensor.transpose(0, 1).indices).all().item()

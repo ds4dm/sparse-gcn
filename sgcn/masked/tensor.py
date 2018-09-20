@@ -2,7 +2,9 @@
 
 
 """Module for the MaskedTensor class."""
-# FIXME: Python 3.7, remove the forwar reference using the annotation.
+
+# FIXME: Pyflakes flaging unquoted forward references
+from __future__ import annotations
 
 from typing import Optional, Union, Callable
 
@@ -184,6 +186,40 @@ class MaskedTensor:
 
         """
         return self.with_values(func(self.values))
+
+    def transpose(self, dim1: int, dim2: int) -> "MaskedTensor":
+        """Transpose two dimensions."""
+        # Transposing two sparse dimensions by permuting axis
+        if dim1 < self.sparse_dims and dim2 < self.sparse_dims:
+            idx = torch.arange(self.indices.size(0))
+            # Using item() because this gets a view of the tensor.
+            idx[dim1], idx[dim2] = idx[dim2].item(), idx[dim1].item()
+            # Using tensor to permute indexes of size
+            shape = torch.Size(torch.tensor(self.shape).index_select(0, idx))
+            shape += self.shape[self.sparse_dims:]
+            return MaskedTensor(
+                indices=self.indices.index_select(0, idx.to(self.device)),
+                values=self.values,
+                shape=shape,
+                dtype=self.dtype,
+                device=self.device
+            )
+
+        # Transposing two dense dimensions by simple transposition
+        elif dim1 >= self.sparse_dims and dim2 >= self.sparse_dims:
+            offset = self.sparse_dims - 1
+            values = self.values.transpose(dim1 - offset, dim2 - offset)
+            return self.with_values(values)
+
+        else:
+            raise RuntimeError("Transposing sparse and dense dims.")
+
+    def t(self) -> "MaskedTensor":
+        """Transpose a matrix."""
+        if self.dims == 2:
+            return self.transpose(0, 1)
+        else:
+            raise RuntimeError("t() is valid for matrices only.")
 
     def sum(
         self, dim: Optional[int] = None, keepdim: bool = False
